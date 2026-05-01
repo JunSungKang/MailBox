@@ -1,0 +1,32 @@
+compatibility_level = 3.6
+
+myhostname = mail.ds-mail.p-e.kr
+myorigin = $mydomain
+mydestination = localhost
+inet_interfaces = all
+inet_protocols = ipv4
+mynetworks = 127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+
+smtpd_banner = $myhostname ESMTP
+biff = no
+append_dot_mydomain = no
+readme_directory = no
+maillog_file = /var/log/postfix.log
+
+virtual_mailbox_domains = ds-mail.p-e.kr post.ds-mail.p-e.kr
+virtual_mailbox_base = /var/mail/vhosts
+virtual_mailbox_maps = hash:/etc/postfix/maps/virtual-mailbox-accounts
+virtual_minimum_uid = 5000
+virtual_uid_maps = static:5000
+virtual_gid_maps = static:5000
+virtual_transport = virtual
+
+smtpd_relay_restrictions = permit_mynetworks reject_unauth_destination
+smtpd_recipient_restrictions = permit_mynetworks reject_unauth_destination
+
+local_recipient_maps =
+relayhost =
+mailbox_size_limit = 0
+virtual_mailbox_limit = 0
+message_size_limit = 52428800
+recipient_delimiter = +

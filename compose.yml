@@ -1,0 +1,60 @@
+services:
+  mail-smtp-receiver:
+    image: mail-smtp-receiver:dev
+    build:
+      context: ./docker/postfix
+    container_name: mail-smtp-receiver
+    restart: unless-stopped
+    environment:
+      MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.ds-mail.p-e.kr}
+      MAIL_DOMAINS: ${MAIL_DOMAINS:-ds-mail.p-e.kr post.ds-mail.p-e.kr}
+      MYNETWORKS: ${MYNETWORKS:-127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16}
+    ports:
+      - "${SMTP_PORT:-25}:25"
+    volumes:
+      - mailbox-store:/var/mail/vhosts
+      - smtp-queue-store:/var/spool/postfix
+      - ./docker/postfix/virtual-mailbox-accounts:/config/virtual-mailbox-accounts:ro
+
+  mail-imap-mailbox:
+    image: mail-imap-mailbox:dev
+    build:
+      context: ./docker/dovecot
+    container_name: mail-imap-mailbox
+    restart: unless-stopped
+    depends_on:
+      - mail-smtp-receiver
+    ports:
+      - "${IMAP_PORT:-143}:143"
+    volumes:
+      - mailbox-store:/var/mail/vhosts
+
+  mail-webmail-ui:
+    image: mail-webmail-ui:dev
+    build:
+      context: ./src
+    container_name: mail-webmail-ui
+    restart: unless-stopped
+    depends_on:
+      - mail-smtp-receiver
+      - mail-imap-mailbox
+    environment:
+      PORT: 3000
+      MAIL_DATA_DIR: /app/data
+      MAILDIR_IMPORT_DIR: /mailboxes/mailbox/Maildir
+      SMTP_URL: smtp://mail-smtp-receiver:25/?ignoreTLS=true
+      MAIL_FROM: ${MAIL_FROM:-mailbox@ds-mail.p-e.kr}
+      MAIL_DEFAULT_DOMAIN: ${MAIL_DEFAULT_DOMAIN:-ds-mail.p-e.kr}
+    ports:
+      - "${MAIL_WEB_PORT:-18080}:3000"
+    volumes:
+      - webmail-data-store:/app/data
+      - mailbox-store:/mailboxes:ro
+
+volumes:
+  mailbox-store:
+    name: mailbox-store
+  smtp-queue-store:
+    name: smtp-queue-store
+  webmail-data-store:
+    name: webmail-data-store

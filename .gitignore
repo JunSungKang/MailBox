@@ -1,0 +1,9 @@
+.agents/
+.codex/
+
+src/node_modules/
+src/.next/
+dist/mail-server-release-*/
+
+.env
+*.log
