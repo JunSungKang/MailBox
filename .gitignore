@@ -1,9 +1,10 @@
 .agents/
 .codex/
 
-src/node_modules/
-src/.next/
+source/apps/webmail-ui/node_modules/
+source/apps/webmail-ui/.next/
 dist/mail-server-release-*/
 
 .env
+source/scripts/images/images.env
 *.log

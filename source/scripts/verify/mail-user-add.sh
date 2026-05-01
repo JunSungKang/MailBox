@@ -2,9 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-DEFAULT_SMTP_RECEIVER_MAP="${PROJECT_DIR}/docker/postfix/virtual-mailbox-accounts"
+DEFAULT_SMTP_RECEIVER_MAP="${PROJECT_DIR}/apps/smtp-receiver/virtual-mailbox-accounts"
 if [[ -f "${PROJECT_DIR}/config/postfix/virtual-mailbox-accounts" ]]; then
   DEFAULT_SMTP_RECEIVER_MAP="${PROJECT_DIR}/config/postfix/virtual-mailbox-accounts"
 fi
@@ -13,28 +13,28 @@ SMTP_RECEIVER_MAP="${SMTP_RECEIVER_MAP:-${POSTFIX_MAP:-${DEFAULT_SMTP_RECEIVER_M
 SMTP_RECEIVER_CONTAINER_MAP="${SMTP_RECEIVER_CONTAINER_MAP:-${POSTFIX_CONTAINER_MAP:-/etc/postfix/maps/virtual-mailbox-accounts}}"
 MAILBOX_PATH="${MAILBOX_PATH:-mailbox/Maildir/}"
 DOMAINS="${DOMAINS:-ds-mail.p-e.kr post.ds-mail.p-e.kr}"
-COMPOSE_FILE="${COMPOSE_FILE:-${PROJECT_DIR}/compose.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-${PROJECT_DIR}/deploy/local/docker-compose.yml}"
 SMTP_RECEIVER_SERVICE="${SMTP_RECEIVER_SERVICE:-${POSTFIX_SERVICE:-mail-smtp-receiver}}"
 
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/mail-user-add.sh add <local-part|email> [...]
-  scripts/mail-user-add.sh remove <local-part|email> [...]
-  scripts/mail-user-add.sh list
+  source/scripts/verify/mail-user-add.sh add <local-part|email> [...]
+  source/scripts/verify/mail-user-add.sh remove <local-part|email> [...]
+  source/scripts/verify/mail-user-add.sh list
 
 Examples:
-  scripts/mail-user-add.sh add alice
-  scripts/mail-user-add.sh add alice@ds-mail.p-e.kr
-  scripts/mail-user-add.sh remove alice
-  DOMAINS="ds-mail.p-e.kr" scripts/mail-user-add.sh add alice
+  source/scripts/verify/mail-user-add.sh add alice
+  source/scripts/verify/mail-user-add.sh add alice@ds-mail.p-e.kr
+  source/scripts/verify/mail-user-add.sh remove alice
+  DOMAINS="ds-mail.p-e.kr" source/scripts/verify/mail-user-add.sh add alice
 
 Environment:
-  SMTP_RECEIVER_MAP            Default: <project>/config/postfix/virtual-mailbox-accounts if present, otherwise <project>/docker/postfix/virtual-mailbox-accounts
+  SMTP_RECEIVER_MAP            Default: <source>/apps/smtp-receiver/virtual-mailbox-accounts
   SMTP_RECEIVER_CONTAINER_MAP  Default: /etc/postfix/maps/virtual-mailbox-accounts
   MAILBOX_PATH                 Default: mailbox/Maildir/
   DOMAINS                      Default: ds-mail.p-e.kr post.ds-mail.p-e.kr
-  COMPOSE_FILE                 Default: <project>/compose.yml
+  COMPOSE_FILE                 Default: <source>/deploy/local/docker-compose.yml
   SMTP_RECEIVER_SERVICE        Default: mail-smtp-receiver
 
 Compatibility:

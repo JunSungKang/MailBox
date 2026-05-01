@@ -2,7 +2,7 @@ services:
   mail-smtp-receiver:
     image: mail-smtp-receiver:dev
     build:
-      context: ./docker/postfix
+      context: ../../apps/smtp-receiver
     container_name: mail-smtp-receiver
     restart: unless-stopped
     environment:
@@ -14,12 +14,12 @@ services:
     volumes:
       - mailbox-store:/var/mail/vhosts
       - smtp-queue-store:/var/spool/postfix
-      - ./docker/postfix/virtual-mailbox-accounts:/config/virtual-mailbox-accounts:ro
+      - ../../apps/smtp-receiver/virtual-mailbox-accounts:/config/virtual-mailbox-accounts:ro
 
   mail-imap-mailbox:
     image: mail-imap-mailbox:dev
     build:
-      context: ./docker/dovecot
+      context: ../../apps/imap-mailbox
     container_name: mail-imap-mailbox
     restart: unless-stopped
     depends_on:
@@ -32,7 +32,7 @@ services:
   mail-webmail-ui:
     image: mail-webmail-ui:dev
     build:
-      context: ./src
+      context: ../../apps/webmail-ui
     container_name: mail-webmail-ui
     restart: unless-stopped
     depends_on:
