@@ -3,23 +3,29 @@ set -euo pipefail
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SOURCE_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
-VERSION="${VERSION:-1.0.0}"
-case "$VERSION" in
-  v*) IMAGE_VERSION="$VERSION" ;;
-  *) IMAGE_VERSION="v$VERSION" ;;
+IMAGE_ENV_SCRIPT="$SOURCE_ROOT/scripts/images/env.sh"
+
+if [ -f "$IMAGE_ENV_SCRIPT" ]; then
+  . "$IMAGE_ENV_SCRIPT"
+fi
+
+IMAGE_VERSION="${VERSION:-v1.0.0}"
+case "$IMAGE_VERSION" in
+  v*) RELEASE_VERSION="${IMAGE_VERSION#v}" ;;
+  *) RELEASE_VERSION="$IMAGE_VERSION" ;;
 esac
 
 RELEASE_ROOT="${RELEASE_ROOT:-$SOURCE_ROOT/release}"
-PACKAGE_NAME="${PACKAGE_NAME:-mail-server-$VERSION}"
+PACKAGE_NAME="${PACKAGE_NAME:-mail-server-$RELEASE_VERSION}"
 PACKAGE_DIR="$RELEASE_ROOT/$PACKAGE_NAME"
 IMAGES_LOCK="${IMAGES_LOCK:-$SOURCE_ROOT/release/images.lock}"
 
 REGISTRY="${REGISTRY:-ghcr.io}"
 IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-junsungkang}"
 IMAGE_NAME_PREFIX="${IMAGE_NAME_PREFIX:-mail-server-}"
-SMTP_IMAGE="${SMTP_IMAGE:-$REGISTRY/$IMAGE_NAMESPACE/${IMAGE_NAME_PREFIX}smtp-receiver:$IMAGE_VERSION}"
-IMAP_IMAGE="${IMAP_IMAGE:-$REGISTRY/$IMAGE_NAMESPACE/${IMAGE_NAME_PREFIX}imap-mailbox:$IMAGE_VERSION}"
-WEBMAIL_IMAGE="${WEBMAIL_IMAGE:-$REGISTRY/$IMAGE_NAMESPACE/${IMAGE_NAME_PREFIX}webmail-ui:$IMAGE_VERSION}"
+SMTP_IMAGE="${SMTP_IMAGE:-${MAIL_SMTP_RECEIVER_IMAGE:-$REGISTRY/$IMAGE_NAMESPACE/${IMAGE_NAME_PREFIX}smtp-receiver:$IMAGE_VERSION}}"
+IMAP_IMAGE="${IMAP_IMAGE:-${MAIL_IMAP_MAILBOX_IMAGE:-$REGISTRY/$IMAGE_NAMESPACE/${IMAGE_NAME_PREFIX}imap-mailbox:$IMAGE_VERSION}}"
+WEBMAIL_IMAGE="${WEBMAIL_IMAGE:-${MAIL_WEBMAIL_UI_IMAGE:-$REGISTRY/$IMAGE_NAMESPACE/${IMAGE_NAME_PREFIX}webmail-ui:$IMAGE_VERSION}}"
 
 require_file() {
   if [ ! -f "$1" ]; then
@@ -142,7 +148,7 @@ main() {
   require_file "$SOURCE_ROOT/deploy/templates/mail-server.env.example"
   prepare_package_dir
   copy_delivery_files
-  printf '%s\n' "$VERSION" > "$PACKAGE_DIR/VERSION"
+  printf '%s\n' "$RELEASE_VERSION" > "$PACKAGE_DIR/VERSION"
   write_images_lock
   write_env_example
   write_compose_wrapper
