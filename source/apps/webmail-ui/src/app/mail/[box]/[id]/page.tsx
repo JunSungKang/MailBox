@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { auditInfo, auditWarn, requestContextFromHeaders } from "@/lib/auditLogger";
 import {
   boxLabels,
   formatBytes,
@@ -17,11 +19,37 @@ type PageProps = {
 };
 
 export default async function MailDetailPage({ params }: PageProps) {
+  const startedAt = Date.now();
   const { box, id } = await params;
-  if (!isMailBox(box)) notFound();
+  const requestHeaders = await headers();
+  if (!isMailBox(box)) {
+    auditWarn("mail.detail.invalid_box", {
+      ...requestContextFromHeaders(requestHeaders, "GET", `/mail/${box}/${id}`),
+      box,
+      messageId: id,
+      durationMs: Date.now() - startedAt
+    });
+    notFound();
+  }
 
   const message = await readMessage(box, id);
-  if (!message) notFound();
+  if (!message) {
+    auditWarn("mail.detail.not_found", {
+      ...requestContextFromHeaders(requestHeaders, "GET", `/mail/${box}/${id}`),
+      box,
+      messageId: id,
+      durationMs: Date.now() - startedAt
+    });
+    notFound();
+  }
+
+  auditInfo("mail.detail.view", {
+    ...requestContextFromHeaders(requestHeaders, "GET", `/mail/${box}/${id}`),
+    box,
+    messageId: message.id,
+    attachmentCount: message.attachments.length,
+    durationMs: Date.now() - startedAt
+  });
 
   return (
     <div className="message">

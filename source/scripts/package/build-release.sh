@@ -87,6 +87,10 @@ MAILBOX_VOLUME=mailbox-store
 SMTP_QUEUE_VOLUME=smtp-queue-store
 WEBMAIL_DATA_VOLUME=webmail-data-store
 MAIL_BACKUP_DIR=/srv/mail-server/backups
+
+MAIL_LOG_DIR=./logs
+MAIL_LOG_MAX_SIZE=10m
+MAIL_LOG_MAX_FILE=5
 EOF
 }
 

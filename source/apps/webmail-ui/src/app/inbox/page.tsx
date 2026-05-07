@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { headers } from "next/headers";
+import { auditInfo, requestContextFromHeaders } from "@/lib/auditLogger";
 import { boxLabels, formatDate, listMessages } from "@/lib/mailStore";
 
 export const dynamic = "force-dynamic";
@@ -29,11 +31,20 @@ function recipientMatches(recipient: string, mailIdFilter: string): boolean {
 }
 
 export default async function InboxPage({ searchParams }: InboxPageProps) {
+  const startedAt = Date.now();
   const { mailId } = await searchParams;
   const mailIdFilter = normalizeMailId(mailId);
   const messages = (await listMessages("inbox")).filter((message) => {
     if (!mailIdFilter) return false;
     return message.to.some((recipient) => recipientMatches(recipient, mailIdFilter));
+  });
+  const requestHeaders = await headers();
+  auditInfo("mail.list.view", {
+    ...requestContextFromHeaders(requestHeaders, "GET", "/inbox", mailIdFilter || undefined),
+    box: "inbox",
+    filterType: mailIdFilter ? "mailId" : "none",
+    resultCount: messages.length,
+    durationMs: Date.now() - startedAt
   });
 
   return (

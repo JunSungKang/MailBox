@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import crypto from "crypto";
 import { simpleParser } from "mailparser";
+import { auditError, auditInfo, auditWarn } from "./auditLogger";
 import { textToHtml } from "./text";
 
 export type MailBox = "inbox" | "sent" | "bounced";
@@ -282,11 +283,22 @@ async function ingestMaildir(): Promise<void> {
   const maildirFiles = await listMaildirFiles();
   if (maildirFiles.length === 0) return;
 
+  const startedAt = Date.now();
   const imported = await readMaildirImportState();
   let changed = false;
+  let importedCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+
+  auditInfo("mail.import.maildir.start", {
+    sourceCount: maildirFiles.length
+  });
 
   for (const { sourcePath, importKey } of maildirFiles) {
-    if (imported.has(importKey)) continue;
+    if (imported.has(importKey)) {
+      skippedCount += 1;
+      continue;
+    }
 
     try {
       const raw = await fs.readFile(sourcePath);
@@ -341,12 +353,21 @@ async function ingestMaildir(): Promise<void> {
 
       imported.add(importKey);
       changed = true;
-    } catch (error) {
-      console.error(
-        "Failed to import Maildir message",
+      importedCount += 1;
+      auditInfo("mail.import.maildir.message.success", {
         sourcePath,
-        error instanceof Error ? error.message : error
-      );
+        importKey,
+        messageId,
+        box: targetBox,
+        attachmentCount: attachments.length
+      });
+    } catch (error) {
+      failedCount += 1;
+      auditError("mail.import.maildir.message.failure", {
+        sourcePath,
+        importKey,
+        error
+      });
       continue;
     }
   }
@@ -354,6 +375,13 @@ async function ingestMaildir(): Promise<void> {
   if (changed) {
     await writeMaildirImportState(imported);
   }
+  auditInfo("mail.import.maildir.finish", {
+    sourceCount: maildirFiles.length,
+    importedCount,
+    skippedCount,
+    failedCount,
+    durationMs: Date.now() - startedAt
+  });
 }
 
 async function copyExistingBounces(): Promise<void> {
@@ -379,7 +407,15 @@ async function copyExistingBounces(): Promise<void> {
         path.join(targetDir, "meta.json"),
         JSON.stringify({ ...meta, box: "bounced" satisfies MailBox }, null, 2)
       );
+      auditInfo("mail.bounce.copy.success", {
+        messageId: entry.name,
+        sourceBox: "inbox",
+        targetBox: "bounced"
+      });
     } catch {
+      auditWarn("mail.bounce.copy.failure", {
+        messageId: entry.name
+      });
       continue;
     }
   }
@@ -388,6 +424,11 @@ async function copyExistingBounces(): Promise<void> {
 async function ingestInboxDrop(): Promise<void> {
   const entries = await fs.readdir(dropInboxDir, { withFileTypes: true });
   const files = entries.filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".eml"));
+  if (files.length > 0) {
+    auditInfo("mail.import.drop.start", {
+      sourceCount: files.length
+    });
+  }
 
   for (const file of files) {
     const sourcePath = path.join(dropInboxDir, file.name);
@@ -440,8 +481,18 @@ async function ingestInboxDrop(): Promise<void> {
       await fs.rename(sourcePath, path.join(dropProcessedDir, file.name)).catch(async () => {
         await fs.rm(sourcePath, { force: true });
       });
-    } catch {
+      auditInfo("mail.import.drop.message.success", {
+        sourceFile: file.name,
+        messageId: id,
+        box: targetBox,
+        attachmentCount: attachments.length
+      });
+    } catch (error) {
       await fs.rename(sourcePath, path.join(dropFailedDir, file.name)).catch(() => {});
+      auditError("mail.import.drop.message.failure", {
+        sourceFile: file.name,
+        error
+      });
     }
   }
 }

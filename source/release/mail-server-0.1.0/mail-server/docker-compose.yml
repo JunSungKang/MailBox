@@ -1,8 +1,15 @@
+x-common-logging: &common-logging
+  driver: local
+  options:
+    max-size: "${MAIL_LOG_MAX_SIZE:-10m}"
+    max-file: "${MAIL_LOG_MAX_FILE:-5}"
+
 services:
   mail-smtp-receiver:
     image: ${MAIL_SMTP_RECEIVER_IMAGE:?MAIL_SMTP_RECEIVER_IMAGE is required}
     container_name: mail-smtp-receiver
     restart: unless-stopped
+    logging: *common-logging
     environment:
       MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.ds-mail.p-e.kr}
       MAIL_DOMAINS: ${MAIL_DOMAINS:-ds-mail.p-e.kr post.ds-mail.p-e.kr}
@@ -12,11 +19,13 @@ services:
     volumes:
       - mailbox-store:/var/mail/vhosts
       - smtp-queue-store:/var/spool/postfix
+      - ${MAIL_LOG_DIR:-./logs}/smtp:/var/log
 
   mail-imap-mailbox:
     image: ${MAIL_IMAP_MAILBOX_IMAGE:?MAIL_IMAP_MAILBOX_IMAGE is required}
     container_name: mail-imap-mailbox
     restart: unless-stopped
+    logging: *common-logging
     depends_on:
       - mail-smtp-receiver
     ports:
@@ -28,6 +37,7 @@ services:
     image: ${MAIL_WEBMAIL_UI_IMAGE:?MAIL_WEBMAIL_UI_IMAGE is required}
     container_name: mail-webmail-ui
     restart: unless-stopped
+    logging: *common-logging
     depends_on:
       - mail-smtp-receiver
       - mail-imap-mailbox

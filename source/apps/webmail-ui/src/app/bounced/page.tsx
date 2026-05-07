@@ -1,10 +1,20 @@
 import Link from "next/link";
+import { headers } from "next/headers";
+import { auditInfo, requestContextFromHeaders } from "@/lib/auditLogger";
 import { boxLabels, formatDate, listMessages } from "@/lib/mailStore";
 
 export const dynamic = "force-dynamic";
 
 export default async function BouncedPage() {
+  const startedAt = Date.now();
   const messages = await listMessages("bounced");
+  const requestHeaders = await headers();
+  auditInfo("mail.list.view", {
+    ...requestContextFromHeaders(requestHeaders, "GET", "/bounced"),
+    box: "bounced",
+    resultCount: messages.length,
+    durationMs: Date.now() - startedAt
+  });
 
   return (
     <>
