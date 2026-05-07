@@ -1,0 +1,3 @@
+smtp-receiver=ghcr.io/junsungkang/mail-server-smtp-receiver:v0.1.0
+imap-mailbox=ghcr.io/junsungkang/mail-server-imap-mailbox:v0.1.0
+webmail-ui=ghcr.io/junsungkang/mail-server-webmail-ui:v0.1.0
