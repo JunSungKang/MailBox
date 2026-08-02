@@ -23,11 +23,16 @@ const MAX_ATTACHMENT_BYTES = 1024 * 1024 * 1024;
 const DEFAULT_MAIL_DOMAIN = process.env.MAIL_DEFAULT_DOMAIN || "ds-mail.p-e.kr";
 const AUTH_COOKIE = "webmail_user";
 const SESSION_SECRET = process.env.WEBMAIL_SESSION_SECRET || (dev ? "local-development-only" : "");
+const SIGNUP_TOKEN = process.env.WEBMAIL_SIGNUP_TOKEN || (dev ? "local-signup-token" : "");
 const COOKIE_SECURE = process.env.WEBMAIL_COOKIE_SECURE === "true";
 const PASSWORD_MIN_LENGTH = 12;
+const MAX_AUTH_BODY_BYTES = 16 * 1024;
 
-if (!SESSION_SECRET) {
-  throw new Error("WEBMAIL_SESSION_SECRET is required in production");
+if (!dev && (SESSION_SECRET.length < 32 || SESSION_SECRET.startsWith("replace-with-"))) {
+  throw new Error("WEBMAIL_SESSION_SECRET must be a non-placeholder value of at least 32 characters");
+}
+if (!dev && (SIGNUP_TOKEN.length < 16 || SIGNUP_TOKEN.startsWith("replace-with-"))) {
+  throw new Error("WEBMAIL_SIGNUP_TOKEN must be a non-placeholder value of at least 16 characters");
 }
 
 const boxLabels = new Set(["inbox", "sent", "bounced"]);
@@ -141,7 +146,11 @@ function requestUserId(req) {
   for (const cookie of cookies) {
     const [name, ...parts] = cookie.trim().split("=");
     if (name === AUTH_COOKIE) {
-      return verifySessionToken(decodeURIComponent(parts.join("=")), SESSION_SECRET);
+      try {
+        return verifySessionToken(decodeURIComponent(parts.join("=")), SESSION_SECRET);
+      } catch {
+        return "";
+      }
     }
   }
   return "";
@@ -226,7 +235,12 @@ async function writeUsers(users) {
 
 async function parseUrlEncodedForm(req) {
   const chunks = [];
+  let totalBytes = 0;
   for await (const chunk of req) {
+    totalBytes += chunk.length;
+    if (totalBytes > MAX_AUTH_BODY_BYTES) {
+      throw new Error("Authentication request body is too large");
+    }
     chunks.push(chunk);
   }
   const body = Buffer.concat(chunks).toString("utf8");
@@ -283,9 +297,17 @@ async function handleAuth(req, res, pathname) {
     return true;
   }
 
-  const form = await parseUrlEncodedForm(req);
+  let form;
+  try {
+    form = await parseUrlEncodedForm(req);
+  } catch (error) {
+    auditWarn("auth.request.rejected", { ...context, status: 413, error, durationMs: Date.now() - startedAt });
+    sendText(res, 413, "인증 요청 본문이 너무 큽니다.");
+    return true;
+  }
   const userId = normalizeUserId(form.get("userId")?.toString());
   const password = form.get("password")?.toString() || "";
+  const signupToken = form.get("signupToken")?.toString() || "";
   if (!isValidUserId(userId)) {
     redirect(res, pathname === "/api/auth/login" ? "/login?error=invalid" : "/signup?error=invalid");
     return true;
@@ -306,6 +328,14 @@ async function handleAuth(req, res, pathname) {
   }
 
   if (pathname === "/api/auth/signup") {
+    const validSignupToken =
+      signupToken.length === SIGNUP_TOKEN.length &&
+      crypto.timingSafeEqual(Buffer.from(signupToken), Buffer.from(SIGNUP_TOKEN));
+    if (!validSignupToken) {
+      auditWarn("auth.signup.invalid_token", { ...context, userId, durationMs: Date.now() - startedAt });
+      redirect(res, "/signup?error=invalid_signup_token");
+      return true;
+    }
     if (!isValidPassword(password)) {
       redirect(res, "/signup?error=weak_password");
       return true;
