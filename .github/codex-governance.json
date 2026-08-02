@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 2,
+  "prAuthorLogin": "JunSungKang",
+  "pushActorLogin": "JunSungKang",
+  "assigneeLogin": "JunSungKang",
+  "reviewerLogin": "junsung-bot[bot]",
+  "integrationBranch": "develop",
+  "releaseBranch": "main",
+  "requiredChecks": ["Governance / current-head"],
+  "mergeMethods": {
+    "integration": "squash",
+    "promotion": "merge"
+  }
+}
