@@ -31,7 +31,7 @@ fi
 
 rebuild_account_map() {
   if ! awk 'NF == 0 || $1 ~ /^#/ || (NF == 2 && $1 ~ /^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$/ && $2 ~ /^[A-Za-z0-9._-]+\/Maildir\/$/) { next } { exit 1 }' "$SOURCE_ACCOUNT_MAP"; then
-    printf 'Invalid account map: %s\n' "$SOURCE_ACCOUNT_MAP" >&2
+    printf '{"time":"%s","level":"ERROR","event":"mail.account_map.invalid"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
     return 1
   fi
   install -m 0644 "$SOURCE_ACCOUNT_MAP" "$ACCOUNT_MAP.new"
@@ -49,8 +49,12 @@ postfix check
     current_checksum="$(sha256sum "$SOURCE_ACCOUNT_MAP" | awk '{print $1}')"
     if [[ "$current_checksum" != "$previous_checksum" ]]; then
       if rebuild_account_map; then
-        postfix reload
-        previous_checksum="$current_checksum"
+        if postfix reload; then
+          previous_checksum="$current_checksum"
+          printf '{"time":"%s","level":"INFO","event":"mail.account_map.reload.success"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        else
+          printf '{"time":"%s","level":"ERROR","event":"mail.account_map.reload.failure"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+        fi
       fi
     fi
   done
