@@ -6,7 +6,9 @@
 - IMAP 메일함 코드는 `imap-mailbox`에 둔다.
 - Webmail 코드는 `webmail-ui`에 둔다.
 - 서비스 결합과 실행은 루트의 Docker Compose 파일이 담당한다.
-- 설치와 운영 설명은 `docs`에 둔다.
+- AI 작업 규칙은 `docs/ai-agent`, 사람 개발자용 설명은 `docs/developer`에 둔다.
+- 작업 전 `docs/ai-agent/README.md`의 Required Reading을 따른다.
+- `sprint/` 계약은 guarded GitHub 흐름에서 로컬로만 사용하고 커밋하지 않는다.
 - 생성된 패키지나 일회성 배포 스크립트를 저장소에 커밋하지 않는다.
 
 ## 운영 로그 원칙
