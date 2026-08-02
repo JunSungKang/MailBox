@@ -30,7 +30,7 @@ webmail-ui compose
   -> sent mailbox metadata
 ```
 
-`mailbox-store`는 SMTP, IMAP, Webmail이 공유한다. `smtp-queue-store`는 Postfix 큐, `webmail-data-store`는 Webmail 사용자와 변환된 메일 데이터를 보존한다.
+`mailbox-store`는 SMTP, IMAP, Webmail이 공유한다. `smtp-queue-store`는 Postfix 큐, `webmail-data-store`는 Webmail 변환 메일을 보존한다. `mailbox-account-store`는 Dovecot 인증 사용자와 Postfix 수신 주소 map을 보존한다.
 
 Webmail은 `mailbox-store`를 read-only로 읽어 원본 Maildir을 자체 저장 형식으로 가져온다. 변환된 메시지는 `mail/{inbox,sent,bounced}/<message-id>` 아래의 `meta.json`, `body.txt`, `body.html`, `attachments/`로 저장한다.
 
@@ -45,7 +45,15 @@ browser
      -> mailStore filesystem/import rule
 ```
 
-로그인 사용자는 HMAC 서명 cookie로 식별한다. 회원가입은 SMTP 주소 map에 존재하는 사용자 ID, scrypt 비밀번호, 운영 가입 코드를 요구한다. 받은메일과 반송메일은 수신자 local-part, 보낸메일은 발신자 local-part가 현재 사용자와 일치해야 조회·상세·첨부 접근이 허용된다.
+로그인 사용자는 HMAC 서명 cookie로 식별한다. 로그인 비밀번호는 `mailbox-account-store`의 Dovecot passwd-file에 있는 salted bcrypt(BLF-CRYPT) hash로 확인한다. 회원가입은 운영 가입 코드를 요구하며 Dovecot 사용자, 허용된 각 domain의 Postfix 수신 주소, 사용자별 Maildir 배달 경로를 함께 등록한다. 받은메일과 반송메일은 수신자 local-part, 보낸메일은 발신자 local-part가 현재 사용자와 일치해야 조회·상세·첨부 접근이 허용된다.
+
+```text
+webmail signup
+  -> mailbox-account-store/dovecot-users
+  -> mailbox-account-store/virtual-mailbox-accounts
+     -> smtp-receiver postmap + reload
+  -> mailbox-store/<user>/Maildir
+```
 
 메일 발송은 로그인 사용자 ID와 `MAIL_DEFAULT_DOMAIN`으로 발신 주소를 고정하고 `SMTP_URL`의 Postfix에 제출한다. 클라이언트가 보낸 임의 발신자 문자열은 실제 발신자 권한으로 사용하지 않는다.
 
@@ -54,7 +62,7 @@ browser
 - 공통 host/domain/port/image/volume 값은 `.env`에서 Compose로 전달한다.
 - `WEBMAIL_SESSION_SECRET`과 `WEBMAIL_SIGNUP_TOKEN`은 운영에서 placeholder를 허용하지 않는다.
 - HTTPS reverse proxy 뒤에서는 `WEBMAIL_COOKIE_SECURE=true`를 사용한다.
-- SMTP 수신 가능 ID는 `smtp-receiver/virtual-mailbox-accounts`에서 관리한다.
+- SMTP 수신 가능 ID는 회원가입으로 `mailbox-account-store/virtual-mailbox-accounts`에 등록한다.
 
 ## 저장소 원칙
 

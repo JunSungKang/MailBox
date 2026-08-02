@@ -23,6 +23,8 @@ RUN addgroup -S -g 5000 vmail && adduser -S -u 5000 -G vmail nextjs
 RUN mkdir -p /app/data/mail/inbox /app/data/mail/sent /app/data/mail/bounced /app/data/tmp /app/data/drop/inbox /app/data/drop/processed /app/data/drop/failed && chown -R nextjs:vmail /app/data
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/server.mjs ./server.mjs
+COPY --from=builder /app/auth-core.mjs ./auth-core.mjs
+COPY --from=builder /app/account-core.mjs ./account-core.mjs
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=deps /app/node_modules ./node_modules

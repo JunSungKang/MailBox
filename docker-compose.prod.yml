@@ -23,6 +23,7 @@ services:
     volumes:
       - mailbox-store:/var/mail/vhosts
       - smtp-queue-store:/var/spool/postfix
+      - mailbox-account-store:/accounts
       - ${MAIL_LOG_DIR:-./logs}/smtp:/var/log
 
   mailbox-imap-mailbox:
@@ -38,6 +39,7 @@ services:
       - "${IMAP_PORT:-143}:143"
     volumes:
       - mailbox-store:/var/mail/vhosts
+      - mailbox-account-store:/accounts
 
   mailbox-webmail-ui:
     image: mailbox-webmail-ui:prod
@@ -53,7 +55,9 @@ services:
       PORT: 3000
       MAIL_DATA_DIR: /app/data
       MAILDIR_IMPORT_DIR: /mailboxes/mailbox/Maildir
-      MAIL_VIRTUAL_USERS_PATH: /config/virtual-mailbox-accounts
+      MAILDIR_IMPORT_PARENT_DIR: /mailboxes
+      MAIL_ACCOUNT_DIR: /accounts
+      MAIL_DOMAINS: ${MAIL_DOMAINS:-ds-mail.p-e.kr post.ds-mail.p-e.kr}
       SMTP_URL: smtp://mailbox-smtp-receiver:25/?ignoreTLS=true
       MAIL_FROM: ${MAIL_FROM:-mailbox@ds-mail.p-e.kr}
       MAIL_DEFAULT_DOMAIN: ${MAIL_DEFAULT_DOMAIN:-ds-mail.p-e.kr}
@@ -65,7 +69,7 @@ services:
     volumes:
       - webmail-data-store:/app/data
       - mailbox-store:/mailboxes:ro
-      - ./smtp-receiver/virtual-mailbox-accounts:/config/virtual-mailbox-accounts:ro
+      - mailbox-account-store:/accounts
 
 volumes:
   mailbox-store:
@@ -74,3 +78,5 @@ volumes:
     name: ${SMTP_QUEUE_VOLUME:-smtp-queue-store}
   webmail-data-store:
     name: ${WEBMAIL_DATA_VOLUME:-webmail-data-store}
+  mailbox-account-store:
+    name: ${MAILBOX_ACCOUNT_VOLUME:-mailbox-account-store}

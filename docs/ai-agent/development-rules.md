@@ -48,7 +48,7 @@ docker compose --env-file .env.example config
 docker compose --env-file .env.example -f docker-compose.prod.yml config
 ```
 
-Docker CLI가 없으면 YAML 파싱, 세 서비스, 세 volume, build context 존재를 대체 검증하고 미실행 항목을 PR에 기록한다.
+Docker CLI가 없으면 YAML 파싱, 세 서비스, 네 volume, build context 존재를 대체 검증하고 미실행 항목을 PR에 기록한다.
 
 ## Documentation Requirements
 

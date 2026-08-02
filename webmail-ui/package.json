@@ -5,15 +5,16 @@
   "scripts": {
     "dev": "NODE_ENV=development node server.mjs",
     "build": "next build",
-    "test": "node --test auth-core.test.mjs",
+    "test": "node --test auth-core.test.mjs account-core.test.mjs",
     "start": "NODE_ENV=production node server.mjs"
   },
   "dependencies": {
+    "bcryptjs": "3.0.2",
     "busboy": "1.6.0",
-    "mailparser": "3.9.8",
-    "next": "16.2.4",
-    "nodemailer": "8.0.7",
-    "postcss": "8.5.13",
+    "mailparser": "3.9.14",
+    "next": "16.2.12",
+    "nodemailer": "9.0.3",
+    "postcss": "8.5.25",
     "react": "19.2.5",
     "react-dom": "19.2.5"
   },
@@ -27,6 +28,7 @@
     "typescript": "6.0.3"
   },
   "overrides": {
-    "postcss": "8.5.13"
+    "postcss": "8.5.25",
+    "sharp": "0.35.3"
   }
 }

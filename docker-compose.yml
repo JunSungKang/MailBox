@@ -16,7 +16,7 @@ services:
     volumes:
       - mailbox-store:/var/mail/vhosts
       - smtp-queue-store:/var/spool/postfix
-      - ./smtp-receiver/virtual-mailbox-accounts:/config/virtual-mailbox-accounts:ro
+      - mailbox-account-store:/accounts
 
   mailbox-imap-mailbox:
     image: mailbox-imap-mailbox:dev
@@ -30,6 +30,7 @@ services:
       - "${IMAP_PORT:-143}:143"
     volumes:
       - mailbox-store:/var/mail/vhosts
+      - mailbox-account-store:/accounts
 
   mailbox-webmail-ui:
     image: mailbox-webmail-ui:dev
@@ -44,7 +45,9 @@ services:
       PORT: 3000
       MAIL_DATA_DIR: /app/data
       MAILDIR_IMPORT_DIR: /mailboxes/mailbox/Maildir
-      MAIL_VIRTUAL_USERS_PATH: /config/virtual-mailbox-accounts
+      MAILDIR_IMPORT_PARENT_DIR: /mailboxes
+      MAIL_ACCOUNT_DIR: /accounts
+      MAIL_DOMAINS: ${MAIL_DOMAINS:-ds-mail.p-e.kr post.ds-mail.p-e.kr crmnova-fin.kro.kr post.crmnova-fin.kro.kr}
       SMTP_URL: smtp://mailbox-smtp-receiver:25/?ignoreTLS=true
       MAIL_FROM: ${MAIL_FROM:-mailbox@ds-mail.p-e.kr}
       MAIL_DEFAULT_DOMAIN: ${MAIL_DEFAULT_DOMAIN:-ds-mail.p-e.kr}
@@ -56,7 +59,7 @@ services:
     volumes:
       - webmail-data-store:/app/data
       - mailbox-store:/mailboxes:ro
-      - ./smtp-receiver/virtual-mailbox-accounts:/config/virtual-mailbox-accounts:ro
+      - mailbox-account-store:/accounts
 
 volumes:
   mailbox-store:
@@ -65,3 +68,5 @@ volumes:
     name: smtp-queue-store
   webmail-data-store:
     name: webmail-data-store
+  mailbox-account-store:
+    name: mailbox-account-store
