@@ -30,29 +30,28 @@ docker compose -f docker-compose.prod.yml logs -f mailbox-webmail-ui
 docker compose -f docker-compose.prod.yml restart
 ```
 
-## 이미지 교체
+## 코드와 이미지 교체
 
-`.env`의 이미지 태그를 변경한 뒤 이미지를 받고 컨테이너를 재생성한다.
+검증된 commit을 checkout한 뒤 운영 이미지를 다시 빌드하고 컨테이너를 재생성한다.
 
 ```bash
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d --build
 curl -f http://localhost:${MAIL_WEB_PORT:-18080}
 ```
 
 ## 롤백
 
-이전 이미지 태그로 `.env`를 되돌린 뒤 같은 `pull`, `up -d`, HTTP 확인 절차를 실행한다.
+이전 검증 commit을 checkout한 뒤 같은 `up -d --build`, HTTP 확인 절차를 실행한다. named volume은 checkout과 image rebuild로 삭제되지 않는다.
 
 ## 이미지 빌드 및 Push
 
 각 모듈은 자신의 Dockerfile로 독립 빌드한다.
 
 ```bash
-docker build -t ghcr.io/junsungkang/mailbox-webmail-ui:<release_tag> webmail-ui
-docker push ghcr.io/junsungkang/mailbox-webmail-ui:<release_tag>
+docker build -t <registry>/mailbox-webmail-ui:<release_tag> webmail-ui
+docker push <registry>/mailbox-webmail-ui:<release_tag>
 ```
 
 ## 수신 주소 관리
 
-수신 주소는 `smtp-receiver/virtual-mailbox-accounts`에서 관리한다. 개발 Compose는 이 파일을 읽기 전용으로 마운트한다. 운영 이미지를 사용하는 경우 파일 변경 후 SMTP 이미지를 다시 빌드해 배포한다.
+수신 주소는 `smtp-receiver/virtual-mailbox-accounts`에서 관리한다. 개발·운영 Compose는 이 파일을 SMTP와 Webmail에 읽기 전용으로 마운트한다. 변경 후 SMTP 컨테이너를 재시작하고 새 사용자의 가입 가능 여부를 확인한다.

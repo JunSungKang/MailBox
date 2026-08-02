@@ -8,7 +8,9 @@ x-common-logging: &common-logging
 
 services:
   mailbox-smtp-receiver:
-    image: ${MAIL_SMTP_RECEIVER_IMAGE:?MAIL_SMTP_RECEIVER_IMAGE is required}
+    image: mailbox-smtp-receiver:prod
+    build:
+      context: ./smtp-receiver
     container_name: mailbox-smtp-receiver
     restart: unless-stopped
     logging: *common-logging
@@ -24,7 +26,9 @@ services:
       - ${MAIL_LOG_DIR:-./logs}/smtp:/var/log
 
   mailbox-imap-mailbox:
-    image: ${MAIL_IMAP_MAILBOX_IMAGE:?MAIL_IMAP_MAILBOX_IMAGE is required}
+    image: mailbox-imap-mailbox:prod
+    build:
+      context: ./imap-mailbox
     container_name: mailbox-imap-mailbox
     restart: unless-stopped
     logging: *common-logging
@@ -36,7 +40,9 @@ services:
       - mailbox-store:/var/mail/vhosts
 
   mailbox-webmail-ui:
-    image: ${MAIL_WEBMAIL_UI_IMAGE:?MAIL_WEBMAIL_UI_IMAGE is required}
+    image: mailbox-webmail-ui:prod
+    build:
+      context: ./webmail-ui
     container_name: mailbox-webmail-ui
     restart: unless-stopped
     logging: *common-logging
@@ -47,6 +53,7 @@ services:
       PORT: 3000
       MAIL_DATA_DIR: /app/data
       MAILDIR_IMPORT_DIR: /mailboxes/mailbox/Maildir
+      MAIL_VIRTUAL_USERS_PATH: /config/virtual-mailbox-accounts
       SMTP_URL: smtp://mailbox-smtp-receiver:25/?ignoreTLS=true
       MAIL_FROM: ${MAIL_FROM:-mailbox@ds-mail.p-e.kr}
       MAIL_DEFAULT_DOMAIN: ${MAIL_DEFAULT_DOMAIN:-ds-mail.p-e.kr}
@@ -58,6 +65,7 @@ services:
     volumes:
       - webmail-data-store:/app/data
       - mailbox-store:/mailboxes:ro
+      - ./smtp-receiver/virtual-mailbox-accounts:/config/virtual-mailbox-accounts:ro
 
 volumes:
   mailbox-store:
