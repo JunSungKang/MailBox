@@ -1,0 +1,39 @@
+name: Governance
+
+on:
+  pull_request_review:
+    types: [submitted, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  evaluate:
+    name: Governance / current-head
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate human PR and App review contract on current head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
+          reviews="$(gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews")"
+          if jq -e '.base.ref == "develop" or .base.ref == "main"' <<<"${pr}" >/dev/null \
+            && test "$(jq -r '.user.login' <<<"${pr}")" = "JunSungKang" \
+            && jq -e '.assignees | any(.login == "JunSungKang")' <<<"${pr}" >/dev/null \
+            && jq -e --arg head "${HEAD_SHA}" '
+              map(select(
+                .user.login == "junsung-bot[bot]" and .commit_id == $head and .state == "APPROVED" and
+                .submitted_at != null and (.body | contains("Codex-assisted independent review")) and (.body | contains($head))
+              )) | length > 0
+            ' <<<"${reviews}" >/dev/null; then
+            echo "Human author and assignee with App current-head formal approval are valid." >>"${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          echo "Human PR and App current-head review governance contract is not satisfied." >>"${GITHUB_STEP_SUMMARY}"
+          exit 1
