@@ -1,4 +1,4 @@
-# 장애 대응
+# MailBox 장애 대응
 
 ## 이미지 pull 실패
 
@@ -10,9 +10,9 @@
 
 ```bash
 docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs mail-smtp-receiver
-docker compose -f docker-compose.prod.yml logs mail-imap-mailbox
-docker compose -f docker-compose.prod.yml logs mail-webmail-ui
+docker compose -f docker-compose.prod.yml logs mailbox-smtp-receiver
+docker compose -f docker-compose.prod.yml logs mailbox-imap-mailbox
+docker compose -f docker-compose.prod.yml logs mailbox-webmail-ui
 ```
 
 포트 충돌이 있으면 `SMTP_PORT`, `IMAP_PORT`, `MAIL_WEB_PORT` 값을 변경한다.
@@ -21,10 +21,10 @@ docker compose -f docker-compose.prod.yml logs mail-webmail-ui
 
 - DNS `MX` 레코드가 서버를 가리키는지 확인한다.
 - 클라우드 방화벽과 OS 방화벽에서 TCP 25번 인바운드가 열려 있는지 확인한다.
-- `mail-smtp-receiver` 로그에서 수신 주소 매핑 실패 여부를 확인한다.
+- `mailbox-smtp-receiver` 로그에서 수신 주소 매핑 실패 여부를 확인한다.
 
 ## 웹메일 접속 실패
 
-- `mail-webmail-ui` 컨테이너 상태와 로그를 확인한다.
+- `mailbox-webmail-ui` 컨테이너 상태와 로그를 확인한다.
 - `MAIL_WEB_PORT`가 방화벽에서 허용되어 있는지 확인한다.
 - `curl -f http://localhost:${MAIL_WEB_PORT:-18080}`으로 HTTP 응답을 확인한다.

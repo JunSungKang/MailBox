@@ -1,6 +1,8 @@
-# Mail Server
+# MailBox
 
-Postfix SMTP 수신기, Dovecot IMAP 메일함, Next.js Webmail을 Docker Compose로 연결한 메일 서버다. 각 실행 모듈을 저장소 최상위에서 바로 찾고 독립적으로 빌드할 수 있다.
+`MailBox`는 Postfix SMTP 수신기, Dovecot IMAP 메일함, Next.js Webmail을 Docker Compose로 연결한 메일 서버 프로젝트다. 각 실행 모듈을 저장소 최상위에서 바로 찾고 독립적으로 빌드할 수 있다.
+
+표시 이름은 `MailBox`, package·image·container 같은 기계 식별자는 `mailbox`, 로컬 checkout 디렉터리는 `mail-box`를 사용한다.
 
 ## 구조
 

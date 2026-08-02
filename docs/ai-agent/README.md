@@ -1,4 +1,4 @@
-# AI Agent Guide
+# MailBox AI Agent Guide
 
 문서 최신화 기준일: 2026-08-02
 
@@ -8,7 +8,7 @@
 
 1. [Development Rules](./development-rules.md)
 2. [Architecture Contract](./architecture-contract.md)
-3. [Developer Onboarding](../developer/onboarding/mail-server-onboarding.md)
+3. [Developer Onboarding](../developer/onboarding/mailbox-onboarding.md)
 4. [System Architecture](../developer/architecture/system-architecture.md)
 
 ## Task-Specific Reading

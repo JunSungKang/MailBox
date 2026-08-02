@@ -1,8 +1,10 @@
-# Architecture Contract
+# MailBox Architecture Contract
 
 문서 최신화 기준일: 2026-08-02
 
 ## Repository Ownership
+
+사용자 표시는 `MailBox`, 기계 식별자는 `mailbox`, 로컬 checkout 디렉터리는 `mail-box`를 사용한다. `MailBox` TypeScript 타입과 `mailbox-store`처럼 메일함 자체를 뜻하는 기존 도메인 용어는 의미를 유지한다.
 
 ```text
 docker-compose*.yml
@@ -39,7 +41,7 @@ SMTP나 IMAP 모듈이 Webmail 내부 파일을 import하거나, Webmail이 Post
 ## Security Invariants
 
 - 비밀번호는 salt가 있는 scrypt hash로만 저장한다.
-- `webmail_user`는 HMAC 검증을 통과한 cookie만 신뢰한다.
+- `mailbox_user`는 HMAC 검증을 통과한 cookie만 신뢰한다.
 - 가입은 등록된 SMTP 사용자와 운영 가입 코드를 모두 요구한다.
 - inbox, sent, bounced, detail, attachment, send는 현재 사용자 소유권을 검사한다.
 - `mailbox-store`는 Webmail에 read-only로 mount한다.

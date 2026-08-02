@@ -26,8 +26,8 @@ COPY --from=builder /app/server.mjs ./server.mjs
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=deps /app/node_modules ./node_modules
-COPY docker-entrypoint.sh /usr/local/bin/mail-webmail-ui-entrypoint
-RUN chmod 0755 /usr/local/bin/mail-webmail-ui-entrypoint
+COPY docker-entrypoint.sh /usr/local/bin/mailbox-webmail-ui-entrypoint
+RUN chmod 0755 /usr/local/bin/mailbox-webmail-ui-entrypoint
 EXPOSE 3000
-ENTRYPOINT ["mail-webmail-ui-entrypoint"]
+ENTRYPOINT ["mailbox-webmail-ui-entrypoint"]
 CMD ["node", "server.mjs"]

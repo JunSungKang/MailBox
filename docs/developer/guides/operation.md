@@ -1,12 +1,12 @@
-# 운영
+# MailBox 운영
 
 ## 상태 확인
 
 ```bash
 docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs -f mail-smtp-receiver
-docker compose -f docker-compose.prod.yml logs -f mail-imap-mailbox
-docker compose -f docker-compose.prod.yml logs -f mail-webmail-ui
+docker compose -f docker-compose.prod.yml logs -f mailbox-smtp-receiver
+docker compose -f docker-compose.prod.yml logs -f mailbox-imap-mailbox
+docker compose -f docker-compose.prod.yml logs -f mailbox-webmail-ui
 ```
 
 ## 로그 확인
@@ -20,8 +20,8 @@ tail -f logs/smtp/postfix.log
 IMAP과 Webmail은 표준 출력 로그를 사용한다. Compose 로그는 local logging driver로 보존하며, `MAIL_LOG_MAX_SIZE`, `MAIL_LOG_MAX_FILE` 값으로 회전 크기와 파일 개수를 조정한다.
 
 ```bash
-docker compose -f docker-compose.prod.yml logs -f mail-imap-mailbox
-docker compose -f docker-compose.prod.yml logs -f mail-webmail-ui
+docker compose -f docker-compose.prod.yml logs -f mailbox-imap-mailbox
+docker compose -f docker-compose.prod.yml logs -f mailbox-webmail-ui
 ```
 
 ## 재시작
@@ -49,8 +49,8 @@ curl -f http://localhost:${MAIL_WEB_PORT:-18080}
 각 모듈은 자신의 Dockerfile로 독립 빌드한다.
 
 ```bash
-docker build -t ghcr.io/junsungkang/mail-server-webmail-ui:<release_tag> webmail-ui
-docker push ghcr.io/junsungkang/mail-server-webmail-ui:<release_tag>
+docker build -t ghcr.io/junsungkang/mailbox-webmail-ui:<release_tag> webmail-ui
+docker push ghcr.io/junsungkang/mailbox-webmail-ui:<release_tag>
 ```
 
 ## 수신 주소 관리
