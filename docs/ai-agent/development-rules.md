@@ -1,4 +1,4 @@
-# Agent Development Rules
+# MailBox Agent Development Rules
 
 문서 최신화 기준일: 2026-08-02
 

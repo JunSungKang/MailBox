@@ -4,8 +4,8 @@ import { currentUserId } from "@/lib/auth";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Mail Web",
-  description: "File based mail web UI"
+  title: "MailBox",
+  description: "MailBox webmail UI"
 };
 
 export default async function RootLayout({
@@ -21,7 +21,7 @@ export default async function RootLayout({
         <div className="shell">
           <aside className="sidebar">
             <div>
-              <div className="brand">Mail</div>
+              <div className="brand">MailBox</div>
               <nav className="nav" aria-label="mail navigation">
                 <Link href="/compose">메일 보내기</Link>
                 <Link href="/inbox">받은 메일함</Link>

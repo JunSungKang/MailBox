@@ -1,4 +1,4 @@
-# Mail Server Documentation
+# MailBox Documentation
 
 문서 최신화 기준일: 2026-08-02
 
@@ -13,7 +13,7 @@
 ## Developer
 
 - [Developer Guide](./developer/README.md): 사람 개발자를 위한 권장 읽기 순서.
-- [Mail Server Onboarding](./developer/onboarding/mail-server-onboarding.md): 기술 스택, 실행 방법, 주요 코드 진입점.
+- [MailBox Onboarding](./developer/onboarding/mailbox-onboarding.md): 기술 스택, 실행 방법, 주요 코드 진입점.
 - [System Architecture](./developer/architecture/system-architecture.md): 컨테이너, 데이터, 인증, 메일 처리 흐름.
 - [Installation](./developer/guides/installation.md): 개발 및 운영 설치.
 - [Operation](./developer/guides/operation.md): 로그, 재시작, 이미지 교체, 주소 관리.

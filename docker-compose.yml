@@ -1,9 +1,11 @@
+name: mailbox
+
 services:
-  mail-smtp-receiver:
-    image: mail-smtp-receiver:dev
+  mailbox-smtp-receiver:
+    image: mailbox-smtp-receiver:dev
     build:
       context: ./smtp-receiver
-    container_name: mail-smtp-receiver
+    container_name: mailbox-smtp-receiver
     restart: unless-stopped
     environment:
       MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.ds-mail.p-e.kr}
@@ -16,34 +18,34 @@ services:
       - smtp-queue-store:/var/spool/postfix
       - ./smtp-receiver/virtual-mailbox-accounts:/config/virtual-mailbox-accounts:ro
 
-  mail-imap-mailbox:
-    image: mail-imap-mailbox:dev
+  mailbox-imap-mailbox:
+    image: mailbox-imap-mailbox:dev
     build:
       context: ./imap-mailbox
-    container_name: mail-imap-mailbox
+    container_name: mailbox-imap-mailbox
     restart: unless-stopped
     depends_on:
-      - mail-smtp-receiver
+      - mailbox-smtp-receiver
     ports:
       - "${IMAP_PORT:-143}:143"
     volumes:
       - mailbox-store:/var/mail/vhosts
 
-  mail-webmail-ui:
-    image: mail-webmail-ui:dev
+  mailbox-webmail-ui:
+    image: mailbox-webmail-ui:dev
     build:
       context: ./webmail-ui
-    container_name: mail-webmail-ui
+    container_name: mailbox-webmail-ui
     restart: unless-stopped
     depends_on:
-      - mail-smtp-receiver
-      - mail-imap-mailbox
+      - mailbox-smtp-receiver
+      - mailbox-imap-mailbox
     environment:
       PORT: 3000
       MAIL_DATA_DIR: /app/data
       MAILDIR_IMPORT_DIR: /mailboxes/mailbox/Maildir
       MAIL_VIRTUAL_USERS_PATH: /config/virtual-mailbox-accounts
-      SMTP_URL: smtp://mail-smtp-receiver:25/?ignoreTLS=true
+      SMTP_URL: smtp://mailbox-smtp-receiver:25/?ignoreTLS=true
       MAIL_FROM: ${MAIL_FROM:-mailbox@ds-mail.p-e.kr}
       MAIL_DEFAULT_DOMAIN: ${MAIL_DEFAULT_DOMAIN:-ds-mail.p-e.kr}
       WEBMAIL_SESSION_SECRET: ${WEBMAIL_SESSION_SECRET:-local-development-only}

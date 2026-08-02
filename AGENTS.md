@@ -1,5 +1,7 @@
 # AGENTS
 
+이 저장소의 프로젝트 이름은 `MailBox`다. 기계 식별자는 `mailbox`, 로컬 checkout 디렉터리는 `mail-box`를 사용한다.
+
 이 저장소는 실행 모듈을 최상위에서 바로 찾을 수 있는 구조를 따른다.
 
 - SMTP 수신 코드는 `smtp-receiver`에 둔다.

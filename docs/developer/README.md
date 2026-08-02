@@ -1,4 +1,4 @@
-# Developer Guide
+# MailBox Developer Guide
 
 문서 최신화 기준일: 2026-08-02
 
@@ -6,7 +6,7 @@
 
 ## Recommended Reading Order
 
-1. [Mail Server Onboarding](./onboarding/mail-server-onboarding.md)
+1. [MailBox Onboarding](./onboarding/mailbox-onboarding.md)
 2. [System Architecture](./architecture/system-architecture.md)
 3. [Installation](./guides/installation.md)
 4. [Operation](./guides/operation.md)

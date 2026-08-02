@@ -1,4 +1,4 @@
-# 설치
+# MailBox 설치
 
 ## 준비
 
@@ -21,12 +21,10 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-운영 환경에서는 `.env`의 이미지 주소를 확인하고 registry 인증 후 운영 Compose를 실행한다.
+운영 환경에서는 `.env`의 보안·domain·port 값을 확인하고 운영 Compose로 세 모듈을 빌드해 실행한다.
 
 ```bash
-docker login ghcr.io
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 ## 점검

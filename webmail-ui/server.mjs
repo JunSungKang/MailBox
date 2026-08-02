@@ -21,7 +21,7 @@ const USERS_PATH = path.join(DATA_DIR, "users.json");
 const VIRTUAL_USERS_PATH = process.env.MAIL_VIRTUAL_USERS_PATH || "";
 const MAX_ATTACHMENT_BYTES = 1024 * 1024 * 1024;
 const DEFAULT_MAIL_DOMAIN = process.env.MAIL_DEFAULT_DOMAIN || "ds-mail.p-e.kr";
-const AUTH_COOKIE = "webmail_user";
+const AUTH_COOKIE = "mailbox_user";
 const SESSION_SECRET = process.env.WEBMAIL_SESSION_SECRET || (dev ? "local-development-only" : "");
 const SIGNUP_TOKEN = process.env.WEBMAIL_SIGNUP_TOKEN || (dev ? "local-signup-token" : "");
 const COOKIE_SECURE = process.env.WEBMAIL_COOKIE_SECURE === "true";

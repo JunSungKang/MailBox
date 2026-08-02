@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { normalizeUserId, isValidUserId, verifySessionToken } from "../../auth-core.mjs";
 
-export const authCookieName = "webmail_user";
+export const authCookieName = "mailbox_user";
 
 export { normalizeUserId, isValidUserId };
 

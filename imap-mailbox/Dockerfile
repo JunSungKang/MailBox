@@ -8,9 +8,9 @@ RUN apt-get update \
 
 COPY dovecot.conf /etc/dovecot/dovecot.conf
 COPY users /etc/dovecot/users
-COPY entrypoint.sh /usr/local/bin/mail-imap-mailbox-entrypoint
+COPY entrypoint.sh /usr/local/bin/mailbox-imap-mailbox-entrypoint
 
-RUN chmod 0755 /usr/local/bin/mail-imap-mailbox-entrypoint \
+RUN chmod 0755 /usr/local/bin/mailbox-imap-mailbox-entrypoint \
   && groupadd -g 5000 vmail \
   && useradd -u 5000 -g 5000 -d /var/mail/vhosts -s /usr/sbin/nologin vmail \
   && chown root:dovecot /etc/dovecot/users \
@@ -18,4 +18,4 @@ RUN chmod 0755 /usr/local/bin/mail-imap-mailbox-entrypoint \
 
 EXPOSE 143
 
-ENTRYPOINT ["mail-imap-mailbox-entrypoint"]
+ENTRYPOINT ["mailbox-imap-mailbox-entrypoint"]

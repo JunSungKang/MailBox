@@ -1,4 +1,4 @@
-# System Architecture
+# MailBox System Architecture
 
 문서 최신화 기준일: 2026-08-02
 
