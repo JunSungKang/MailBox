@@ -39,8 +39,11 @@ docker compose -f docker-compose.prod.yml up -d
 
 ## 문서
 
-- [아키텍처](docs/architecture.md)
-- [설치](docs/installation.md)
-- [운영](docs/operation.md)
-- [장애 대응](docs/troubleshooting.md)
-- [사용자 안내](docs/user-guide.md)
+- [문서 안내](docs/README.md)
+- [AI Agent 작업 지침](docs/ai-agent/README.md)
+- [개발자 온보딩](docs/developer/README.md)
+- [시스템 아키텍처](docs/developer/architecture/system-architecture.md)
+- [설치](docs/developer/guides/installation.md)
+- [운영](docs/developer/guides/operation.md)
+- [장애 대응](docs/developer/guides/troubleshooting.md)
+- [사용자 안내](docs/developer/guides/user-guide.md)
