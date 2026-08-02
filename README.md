@@ -48,3 +48,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 - [운영](docs/developer/guides/operation.md)
 - [장애 대응](docs/developer/guides/troubleshooting.md)
 - [사용자 안내](docs/developer/guides/user-guide.md)
+
+## 라이선스
+
+MailBox는 [Apache License 2.0](LICENSE)에 따라 배포된다. SPDX 식별자는 `Apache-2.0`이다.
