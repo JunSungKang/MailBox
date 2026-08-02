@@ -1,50 +1,23 @@
 import Link from "next/link";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { auditInfo, requestContextFromHeaders } from "@/lib/auditLogger";
 import { currentUserId } from "@/lib/auth";
+import { messageBelongsToUser } from "@/lib/mailAccess";
 import { boxLabels, formatDate, listMessages } from "@/lib/mailStore";
 
 export const dynamic = "force-dynamic";
 
-type InboxPageProps = {
-  searchParams: Promise<{
-    mailId?: string | string[];
-  }>;
-};
-
-function normalizeMailId(value: string | string[] | undefined): string {
-  const rawValue = Array.isArray(value) ? value[0] : value;
-  return (rawValue || "").trim().toLowerCase();
-}
-
-function recipientMatches(recipient: string, mailIdFilter: string): boolean {
-  const recipientText = recipient.toLowerCase();
-  if (mailIdFilter.includes("@")) {
-    return recipientText.includes(mailIdFilter);
-  }
-
-  const addresses = recipientText.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g) || [];
-  if (addresses.length === 0) {
-    return recipientText.includes(mailIdFilter);
-  }
-
-  return addresses.some((address) => address.split("@")[0] === mailIdFilter);
-}
-
-export default async function InboxPage({ searchParams }: InboxPageProps) {
+export default async function InboxPage() {
   const startedAt = Date.now();
-  const { mailId } = await searchParams;
   const signedInUserId = await currentUserId();
-  const mailIdFilter = normalizeMailId(mailId) || signedInUserId;
-  const messages = (await listMessages("inbox")).filter((message) => {
-    if (!mailIdFilter) return false;
-    return message.to.some((recipient) => recipientMatches(recipient, mailIdFilter));
-  });
+  if (!signedInUserId) redirect("/login");
+  const messages = (await listMessages("inbox")).filter((message) => messageBelongsToUser(message, signedInUserId));
   const requestHeaders = await headers();
   auditInfo("mail.list.view", {
-    ...requestContextFromHeaders(requestHeaders, "GET", "/inbox", mailIdFilter || undefined),
+    ...requestContextFromHeaders(requestHeaders, "GET", "/inbox", signedInUserId),
     box: "inbox",
-    filterType: mailIdFilter ? "mailId" : "none",
+    filterType: "signedInUser",
     resultCount: messages.length,
     durationMs: Date.now() - startedAt
   });
@@ -55,25 +28,7 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
         <h1>{boxLabels.inbox}</h1>
       </div>
       <section className="panel">
-        <form className="mailSearch" action="/inbox">
-          <label className="mailSearchLabel" htmlFor="mailId">
-            메일 아이디
-          </label>
-          <input
-            id="mailId"
-            name="mailId"
-            type="text"
-            defaultValue={mailIdFilter}
-            placeholder="jskang 또는 jskang@domain.com"
-            autoComplete="email"
-          />
-          <button className="button" type="submit">
-            조회
-          </button>
-        </form>
-        {!mailIdFilter ? (
-          <div className="empty">메일을 조회할 계정을 입력해주세요.</div>
-        ) : messages.length === 0 ? (
+        {messages.length === 0 ? (
           <div className="empty">메일이 없습니다.</div>
         ) : (
           <div className="mailList">

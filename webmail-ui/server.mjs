@@ -6,6 +6,7 @@ import crypto from "crypto";
 import next from "next";
 import Busboy from "busboy";
 import nodemailer from "nodemailer";
+import { isValidUserId, normalizeUserId, sessionToken, verifySessionToken } from "./auth-core.mjs";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.BIND_HOST || "0.0.0.0";
@@ -21,6 +22,13 @@ const VIRTUAL_USERS_PATH = process.env.MAIL_VIRTUAL_USERS_PATH || "";
 const MAX_ATTACHMENT_BYTES = 1024 * 1024 * 1024;
 const DEFAULT_MAIL_DOMAIN = process.env.MAIL_DEFAULT_DOMAIN || "ds-mail.p-e.kr";
 const AUTH_COOKIE = "webmail_user";
+const SESSION_SECRET = process.env.WEBMAIL_SESSION_SECRET || (dev ? "local-development-only" : "");
+const COOKIE_SECURE = process.env.WEBMAIL_COOKIE_SECURE === "true";
+const PASSWORD_MIN_LENGTH = 12;
+
+if (!SESSION_SECRET) {
+  throw new Error("WEBMAIL_SESSION_SECRET is required in production");
+}
 
 const boxLabels = new Set(["inbox", "sent", "bounced"]);
 
@@ -124,12 +132,39 @@ function normalizeSender(value) {
   return process.env.MAIL_FROM || "";
 }
 
-function normalizeUserId(value) {
-  return (value || "").trim().toLowerCase();
+function isValidPassword(value) {
+  return typeof value === "string" && value.length >= PASSWORD_MIN_LENGTH && value.length <= 128;
 }
 
-function isValidUserId(value) {
-  return /^[a-z0-9._-]{1,64}$/.test(value);
+function requestUserId(req) {
+  const cookies = String(req.headers.cookie || "").split(";");
+  for (const cookie of cookies) {
+    const [name, ...parts] = cookie.trim().split("=");
+    if (name === AUTH_COOKIE) {
+      return verifySessionToken(decodeURIComponent(parts.join("=")), SESSION_SECRET);
+    }
+  }
+  return "";
+}
+
+function passwordHash(password, salt) {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, 64, (error, derivedKey) => {
+      if (error) reject(error);
+      else resolve(derivedKey.toString("base64url"));
+    });
+  });
+}
+
+async function passwordRecord(userId, password) {
+  const salt = crypto.randomBytes(16).toString("base64url");
+  return { id: userId, salt, passwordHash: await passwordHash(password, salt) };
+}
+
+async function passwordMatches(user, password) {
+  const actual = await passwordHash(password, user.salt);
+  if (actual.length !== user.passwordHash.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(user.passwordHash));
 }
 
 function generatedId() {
@@ -152,7 +187,14 @@ async function readUsers() {
     const raw = await fsp.readFile(USERS_PATH, "utf8");
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item) => typeof item === "string" && isValidUserId(item));
+    return parsed.filter(
+      (item) =>
+        item &&
+        typeof item === "object" &&
+        isValidUserId(item.id) &&
+        typeof item.salt === "string" &&
+        typeof item.passwordHash === "string"
+    );
   } catch {
     return [];
   }
@@ -175,11 +217,11 @@ async function readVirtualUsers() {
 
 async function readKnownUsers() {
   const [users, virtualUsers] = await Promise.all([readUsers(), readVirtualUsers()]);
-  return [...new Set([...users, ...virtualUsers])].sort();
+  return [...new Set([...users.map((user) => user.id), ...virtualUsers])].sort();
 }
 
 async function writeUsers(users) {
-  await fsp.writeFile(USERS_PATH, JSON.stringify([...new Set(users)].sort(), null, 2));
+  await fsp.writeFile(USERS_PATH, JSON.stringify([...users].sort((a, b) => a.id.localeCompare(b.id)), null, 2));
 }
 
 async function parseUrlEncodedForm(req) {
@@ -192,9 +234,10 @@ async function parseUrlEncodedForm(req) {
 }
 
 function setAuthCookie(res, userId) {
+  const secure = COOKIE_SECURE ? "; Secure" : "";
   res.setHeader(
     "Set-Cookie",
-    `${AUTH_COOKIE}=${encodeURIComponent(userId)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`
+    `${AUTH_COOKIE}=${encodeURIComponent(sessionToken(userId, SESSION_SECRET))}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secure}`
   );
 }
 
@@ -242,6 +285,7 @@ async function handleAuth(req, res, pathname) {
 
   const form = await parseUrlEncodedForm(req);
   const userId = normalizeUserId(form.get("userId")?.toString());
+  const password = form.get("password")?.toString() || "";
   if (!isValidUserId(userId)) {
     redirect(res, pathname === "/api/auth/login" ? "/login?error=invalid" : "/signup?error=invalid");
     return true;
@@ -249,20 +293,24 @@ async function handleAuth(req, res, pathname) {
 
   const users = await readUsers();
   const knownUsers = await readKnownUsers();
-  const exists = knownUsers.includes(userId);
+  const registeredUser = users.find((user) => user.id === userId);
 
-  if (pathname === "/api/auth/login" && !exists) {
-    auditWarn("auth.login.not_found", {
+  if (pathname === "/api/auth/login" && (!registeredUser || !(await passwordMatches(registeredUser, password)))) {
+    auditWarn("auth.login.invalid_credentials", {
       ...context,
       userId,
       durationMs: Date.now() - startedAt
     });
-    redirect(res, "/login?error=not_found");
+    redirect(res, "/login?error=invalid_credentials");
     return true;
   }
 
   if (pathname === "/api/auth/signup") {
-    if (exists) {
+    if (!isValidPassword(password)) {
+      redirect(res, "/signup?error=weak_password");
+      return true;
+    }
+    if (registeredUser) {
       auditWarn("auth.signup.exists", {
         ...context,
         userId,
@@ -271,7 +319,16 @@ async function handleAuth(req, res, pathname) {
       redirect(res, "/signup?error=exists");
       return true;
     }
-    await writeUsers([...users, userId]);
+    if (!knownUsers.includes(userId)) {
+      auditWarn("auth.signup.unknown_mailbox", {
+        ...context,
+        userId,
+        durationMs: Date.now() - startedAt
+      });
+      redirect(res, "/signup?error=unknown_mailbox");
+      return true;
+    }
+    await writeUsers([...users, await passwordRecord(userId, password)]);
   }
 
   setAuthCookie(res, userId);
@@ -281,7 +338,7 @@ async function handleAuth(req, res, pathname) {
     userId,
     durationMs: Date.now() - startedAt
   });
-  redirect(res, `/inbox?mailId=${encodeURIComponent(userId)}`);
+  redirect(res, "/inbox");
   return true;
 }
 
@@ -320,7 +377,13 @@ async function sendViaConfiguredTransport(meta, bodyText, attachments) {
 
 async function handleSend(req, res) {
   const startedAt = Date.now();
-  const context = requestContext(req, "/api/send");
+  const userId = requestUserId(req);
+  const context = { ...requestContext(req, "/api/send"), actor: userId || "anonymous" };
+  if (!userId) {
+    auditWarn("mail.send.unauthorized", { ...context, status: 401, durationMs: Date.now() - startedAt });
+    redirect(res, "/login");
+    return;
+  }
   await ensureDirs();
 
   const contentType = req.headers["content-type"] || "";
@@ -482,7 +545,7 @@ async function handleSend(req, res) {
       const meta = {
         id: messageId,
         box: "sent",
-        from: normalizeSender(fields.from),
+        from: `${userId}@${DEFAULT_MAIL_DOMAIN}`,
         to,
         subject: fields.subject || "",
         date: new Date().toISOString(),
@@ -552,9 +615,15 @@ async function handleSend(req, res) {
 
 async function handleDownload(req, res, pathname) {
   const startedAt = Date.now();
-  const context = requestContext(req, pathname);
+  const userId = requestUserId(req);
+  const context = { ...requestContext(req, pathname), actor: userId || "anonymous" };
   const match = pathname.match(/^\/api\/mail\/([^/]+)\/([^/]+)\/attachments\/([^/]+)$/);
   if (!match) return false;
+  if (!userId) {
+    auditWarn("mail.attachment.unauthorized", { ...context, status: 401, durationMs: Date.now() - startedAt });
+    sendText(res, 401, "로그인이 필요합니다.");
+    return true;
+  }
 
   const [, box, messageId, attachmentId] = match;
   if (!boxLabels.has(box)) {
@@ -575,6 +644,11 @@ async function handleDownload(req, res, pathname) {
     const safeAttachmentId = safeSegment(attachmentId);
     const messageDir = path.join(MAIL_ROOT, box, safeMessageId);
     const meta = JSON.parse(await fsp.readFile(path.join(messageDir, "meta.json"), "utf8"));
+    if (!messageOwnedByUser(meta, userId)) {
+      auditWarn("mail.attachment.forbidden", { ...context, box, messageId, status: 403, durationMs: Date.now() - startedAt });
+      sendText(res, 403, "이 첨부파일에 접근할 수 없습니다.");
+      return true;
+    }
     const attachment = meta.attachments.find((item) => item.id === safeAttachmentId);
     if (!attachment) {
       auditWarn("mail.attachment.not_found", {
@@ -621,6 +695,16 @@ async function handleDownload(req, res, pathname) {
   }
 
   return true;
+}
+
+function addressBelongsToUser(value, userId) {
+  const addresses = String(value || "").toLowerCase().match(/[a-z0-9._%+-]+@[a-z0-9.-]+/g) || [];
+  return addresses.some((address) => address.split("@")[0] === userId);
+}
+
+function messageOwnedByUser(meta, userId) {
+  if (meta.box === "sent") return addressBelongsToUser(meta.from, userId);
+  return Array.isArray(meta.to) && meta.to.some((recipient) => addressBelongsToUser(recipient, userId));
 }
 
 await ensureDirs();

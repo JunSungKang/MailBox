@@ -1,16 +1,21 @@
 import Link from "next/link";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { auditInfo, requestContextFromHeaders } from "@/lib/auditLogger";
+import { currentUserId } from "@/lib/auth";
+import { messageBelongsToUser } from "@/lib/mailAccess";
 import { boxLabels, formatDate, listMessages } from "@/lib/mailStore";
 
 export const dynamic = "force-dynamic";
 
 export default async function SentPage() {
   const startedAt = Date.now();
-  const messages = await listMessages("sent");
+  const userId = await currentUserId();
+  if (!userId) redirect("/login");
+  const messages = (await listMessages("sent")).filter((message) => messageBelongsToUser(message, userId));
   const requestHeaders = await headers();
   auditInfo("mail.list.view", {
-    ...requestContextFromHeaders(requestHeaders, "GET", "/sent"),
+    ...requestContextFromHeaders(requestHeaders, "GET", "/sent", userId),
     box: "sent",
     resultCount: messages.length,
     durationMs: Date.now() - startedAt

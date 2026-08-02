@@ -1,6 +1,8 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auditInfo, auditWarn, requestContextFromHeaders } from "@/lib/auditLogger";
+import { currentUserId } from "@/lib/auth";
+import { messageBelongsToUser } from "@/lib/mailAccess";
 import {
   boxLabels,
   formatBytes,
@@ -23,6 +25,8 @@ type PageProps = {
 export default async function MailDetailPage({ params }: PageProps) {
   const startedAt = Date.now();
   const { box, id } = await params;
+  const userId = await currentUserId();
+  if (!userId) redirect("/login");
   const requestHeaders = await headers();
   if (!isMailBox(box)) {
     auditWarn("mail.detail.invalid_box", {
@@ -45,8 +49,18 @@ export default async function MailDetailPage({ params }: PageProps) {
     notFound();
   }
 
+  if (!messageBelongsToUser(message, userId)) {
+    auditWarn("mail.detail.forbidden", {
+      ...requestContextFromHeaders(requestHeaders, "GET", `/mail/${box}/${id}`, userId),
+      box,
+      messageId: id,
+      durationMs: Date.now() - startedAt
+    });
+    notFound();
+  }
+
   auditInfo("mail.detail.view", {
-    ...requestContextFromHeaders(requestHeaders, "GET", `/mail/${box}/${id}`),
+    ...requestContextFromHeaders(requestHeaders, "GET", `/mail/${box}/${id}`, userId),
     box,
     messageId: message.id,
     attachmentCount: message.attachments.length,

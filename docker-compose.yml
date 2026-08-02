@@ -46,6 +46,8 @@ services:
       SMTP_URL: smtp://mail-smtp-receiver:25/?ignoreTLS=true
       MAIL_FROM: ${MAIL_FROM:-mailbox@ds-mail.p-e.kr}
       MAIL_DEFAULT_DOMAIN: ${MAIL_DEFAULT_DOMAIN:-ds-mail.p-e.kr}
+      WEBMAIL_SESSION_SECRET: ${WEBMAIL_SESSION_SECRET:-local-development-only}
+      WEBMAIL_COOKIE_SECURE: ${WEBMAIL_COOKIE_SECURE:-false}
     ports:
       - "${MAIL_WEB_PORT:-18080}:3000"
     volumes:

@@ -9,7 +9,7 @@ function firstValue(value: string | string[] | undefined): string {
 }
 
 function errorMessage(error: string): string {
-  if (error === "not_found") return "가입된 아이디가 없습니다.";
+  if (error === "invalid_credentials") return "아이디 또는 비밀번호가 올바르지 않습니다.";
   if (error === "invalid") return "아이디는 영문 소문자, 숫자, 점, 밑줄, 하이픈만 사용할 수 있습니다.";
   return "";
 }
@@ -28,6 +28,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <div className="field">
             <label htmlFor="userId">아이디</label>
             <input id="userId" name="userId" type="text" autoComplete="username" required />
+          </div>
+          <div className="field">
+            <label htmlFor="password">비밀번호</label>
+            <input id="password" name="password" type="password" autoComplete="current-password" required />
           </div>
           {message ? <p className="status error">{message}</p> : null}
           <div className="actions">

@@ -13,6 +13,8 @@
 cp .env.example .env
 ```
 
+운영 전 `WEBMAIL_SESSION_SECRET`을 충분히 긴 무작위 값으로 교체한다. 이 값이 바뀌면 기존 로그인 세션은 만료된다. HTTPS reverse proxy 뒤에서 운영할 때는 `WEBMAIL_COOKIE_SECURE=true`로 설정한다.
+
 개발 또는 소스 검증 환경에서는 세 이미지를 직접 빌드해 실행한다.
 
 ```bash

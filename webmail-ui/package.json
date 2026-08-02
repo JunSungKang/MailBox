@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "NODE_ENV=development node server.mjs",
     "build": "next build",
+    "test": "node --test auth-core.test.mjs",
     "start": "NODE_ENV=production node server.mjs"
   },
   "dependencies": {

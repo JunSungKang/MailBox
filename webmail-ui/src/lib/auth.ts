@@ -1,17 +1,14 @@
 import { cookies } from "next/headers";
+import { normalizeUserId, isValidUserId, verifySessionToken } from "../../auth-core.mjs";
 
 export const authCookieName = "webmail_user";
 
-export function normalizeUserId(value: string | undefined): string {
-  return (value || "").trim().toLowerCase();
-}
-
-export function isValidUserId(value: string): boolean {
-  return /^[a-z0-9._-]{1,64}$/.test(value);
-}
+export { normalizeUserId, isValidUserId };
 
 export async function currentUserId(): Promise<string> {
   const cookieStore = await cookies();
-  const userId = normalizeUserId(cookieStore.get(authCookieName)?.value);
-  return isValidUserId(userId) ? userId : "";
+  const token = cookieStore.get(authCookieName)?.value || "";
+  const dev = process.env.NODE_ENV !== "production";
+  const secret = process.env.WEBMAIL_SESSION_SECRET || (dev ? "local-development-only" : "");
+  return verifySessionToken(token, secret);
 }

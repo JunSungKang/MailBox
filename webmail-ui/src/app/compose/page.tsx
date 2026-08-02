@@ -1,4 +1,10 @@
-export default function ComposePage() {
+import { redirect } from "next/navigation";
+import { currentUserId } from "@/lib/auth";
+
+export default async function ComposePage() {
+  const userId = await currentUserId();
+  if (!userId) redirect("/login");
+
   return (
     <>
       <div className="pageHeader">
@@ -12,8 +18,8 @@ export default function ComposePage() {
               id="from"
               name="from"
               type="text"
-              placeholder="jskang"
-              autoComplete="username"
+              value={userId}
+              readOnly
             />
           </div>
           <div className="field">
