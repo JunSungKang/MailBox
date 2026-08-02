@@ -1,0 +1,656 @@
+import http from "http";
+import fs from "fs";
+import { promises as fsp } from "fs";
+import path from "path";
+import crypto from "crypto";
+import next from "next";
+import Busboy from "busboy";
+import nodemailer from "nodemailer";
+
+const dev = process.env.NODE_ENV !== "production";
+const hostname = process.env.BIND_HOST || "0.0.0.0";
+const port = Number(process.env.PORT || 3000);
+const app = next({ dev, hostname, port });
+const handle = app.getRequestHandler();
+
+const DATA_DIR = process.env.MAIL_DATA_DIR || path.join(process.cwd(), "data");
+const MAIL_ROOT = path.join(DATA_DIR, "mail");
+const TMP_ROOT = path.join(DATA_DIR, "tmp");
+const USERS_PATH = path.join(DATA_DIR, "users.json");
+const VIRTUAL_USERS_PATH = process.env.MAIL_VIRTUAL_USERS_PATH || "";
+const MAX_ATTACHMENT_BYTES = 1024 * 1024 * 1024;
+const DEFAULT_MAIL_DOMAIN = process.env.MAIL_DEFAULT_DOMAIN || "ds-mail.p-e.kr";
+const AUTH_COOKIE = "webmail_user";
+
+const boxLabels = new Set(["inbox", "sent", "bounced"]);
+
+function serializeAuditValue(value) {
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack
+    };
+  }
+  if (Array.isArray(value)) {
+    return value.map(serializeAuditValue);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, serializeAuditValue(item)])
+    );
+  }
+  return value;
+}
+
+function auditLog(level, event, fields = {}) {
+  const line = JSON.stringify(
+    serializeAuditValue({
+      time: new Date().toISOString(),
+      level,
+      event,
+      ...fields
+    })
+  );
+  if (level === "ERROR") {
+    console.error(line);
+  } else if (level === "WARN") {
+    console.warn(line);
+  } else {
+    console.info(line);
+  }
+}
+
+function auditWarn(event, fields = {}) {
+  auditLog("WARN", event, fields);
+}
+
+function auditError(event, fields = {}) {
+  auditLog("ERROR", event, fields);
+}
+
+function requestContext(req, pathOverride) {
+  const forwardedFor = req.headers["x-forwarded-for"];
+  const ip = Array.isArray(forwardedFor)
+    ? forwardedFor[0]
+    : (forwardedFor || "").split(",")[0].trim() || req.headers["x-real-ip"];
+  return {
+    requestId: req.headers["x-request-id"] || generatedId(),
+    actor: "anonymous",
+    ip,
+    userAgent: req.headers["user-agent"],
+    method: req.method,
+    path: pathOverride || req.url || ""
+  };
+}
+
+function safeSegment(value) {
+  if (!/^[A-Za-z0-9._-]+$/.test(value)) {
+    throw new Error("Invalid path segment");
+  }
+  return value;
+}
+
+function escapeHtml(value) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function textToHtml(value) {
+  return escapeHtml(value).replace(/\r?\n/g, "<br />");
+}
+
+function splitAddresses(value) {
+  return value
+    .split(/[,\n;]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeRecipient(value) {
+  const trimmed = value.trim();
+  if (trimmed.includes("@")) return trimmed;
+  return `${trimmed}@${DEFAULT_MAIL_DOMAIN}`;
+}
+
+function normalizeSender(value) {
+  const trimmed = value.trim();
+  if (trimmed.includes("@")) return trimmed;
+  if (trimmed) return `${trimmed}@${DEFAULT_MAIL_DOMAIN}`;
+  return process.env.MAIL_FROM || "";
+}
+
+function normalizeUserId(value) {
+  return (value || "").trim().toLowerCase();
+}
+
+function isValidUserId(value) {
+  return /^[a-z0-9._-]{1,64}$/.test(value);
+}
+
+function generatedId() {
+  return `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
+}
+
+async function ensureDirs() {
+  await Promise.all([
+    fsp.mkdir(path.join(MAIL_ROOT, "inbox"), { recursive: true }),
+    fsp.mkdir(path.join(MAIL_ROOT, "sent"), { recursive: true }),
+    fsp.mkdir(TMP_ROOT, { recursive: true }),
+    fsp.mkdir(path.join(DATA_DIR, "drop", "inbox"), { recursive: true }),
+    fsp.mkdir(path.join(DATA_DIR, "drop", "processed"), { recursive: true }),
+    fsp.mkdir(path.join(DATA_DIR, "drop", "failed"), { recursive: true })
+  ]);
+}
+
+async function readUsers() {
+  try {
+    const raw = await fsp.readFile(USERS_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item) => typeof item === "string" && isValidUserId(item));
+  } catch {
+    return [];
+  }
+}
+
+async function readVirtualUsers() {
+  if (!VIRTUAL_USERS_PATH) return [];
+  try {
+    const raw = await fsp.readFile(VIRTUAL_USERS_PATH, "utf8");
+    return raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#"))
+      .map((line) => normalizeUserId(line.split(/\s+/)[0]?.split("@")[0]))
+      .filter(isValidUserId);
+  } catch {
+    return [];
+  }
+}
+
+async function readKnownUsers() {
+  const [users, virtualUsers] = await Promise.all([readUsers(), readVirtualUsers()]);
+  return [...new Set([...users, ...virtualUsers])].sort();
+}
+
+async function writeUsers(users) {
+  await fsp.writeFile(USERS_PATH, JSON.stringify([...new Set(users)].sort(), null, 2));
+}
+
+async function parseUrlEncodedForm(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+  }
+  const body = Buffer.concat(chunks).toString("utf8");
+  return new URLSearchParams(body);
+}
+
+function setAuthCookie(res, userId) {
+  res.setHeader(
+    "Set-Cookie",
+    `${AUTH_COOKIE}=${encodeURIComponent(userId)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`
+  );
+}
+
+function clearAuthCookie(res) {
+  res.setHeader("Set-Cookie", `${AUTH_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+async function removeDir(dir) {
+  await fsp.rm(dir, { force: true, recursive: true }).catch(() => {});
+}
+
+function redirect(res, location) {
+  res.writeHead(303, { Location: location });
+  res.end();
+}
+
+function sendText(res, status, message) {
+  res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8" });
+  res.end(message);
+}
+
+async function handleAuth(req, res, pathname) {
+  const startedAt = Date.now();
+  const context = requestContext(req, pathname);
+
+  if (pathname === "/api/auth/logout") {
+    clearAuthCookie(res);
+    auditLog("INFO", "auth.logout", {
+      ...context,
+      durationMs: Date.now() - startedAt
+    });
+    redirect(res, "/inbox");
+    return true;
+  }
+
+  if (pathname !== "/api/auth/login" && pathname !== "/api/auth/signup") {
+    return false;
+  }
+
+  const contentType = req.headers["content-type"] || "";
+  if (!contentType.includes("application/x-www-form-urlencoded")) {
+    sendText(res, 415, "application/x-www-form-urlencoded 요청만 지원합니다.");
+    return true;
+  }
+
+  const form = await parseUrlEncodedForm(req);
+  const userId = normalizeUserId(form.get("userId")?.toString());
+  if (!isValidUserId(userId)) {
+    redirect(res, pathname === "/api/auth/login" ? "/login?error=invalid" : "/signup?error=invalid");
+    return true;
+  }
+
+  const users = await readUsers();
+  const knownUsers = await readKnownUsers();
+  const exists = knownUsers.includes(userId);
+
+  if (pathname === "/api/auth/login" && !exists) {
+    auditWarn("auth.login.not_found", {
+      ...context,
+      userId,
+      durationMs: Date.now() - startedAt
+    });
+    redirect(res, "/login?error=not_found");
+    return true;
+  }
+
+  if (pathname === "/api/auth/signup") {
+    if (exists) {
+      auditWarn("auth.signup.exists", {
+        ...context,
+        userId,
+        durationMs: Date.now() - startedAt
+      });
+      redirect(res, "/signup?error=exists");
+      return true;
+    }
+    await writeUsers([...users, userId]);
+  }
+
+  setAuthCookie(res, userId);
+  auditLog("INFO", pathname === "/api/auth/signup" ? "auth.signup.success" : "auth.login.success", {
+    ...context,
+    actor: userId,
+    userId,
+    durationMs: Date.now() - startedAt
+  });
+  redirect(res, `/inbox?mailId=${encodeURIComponent(userId)}`);
+  return true;
+}
+
+async function sendViaConfiguredTransport(meta, bodyText, attachments) {
+  const mail = {
+    from: meta.from || process.env.MAIL_FROM || "webmail@localhost",
+    to: meta.to.join(", "),
+    subject: meta.subject || "(제목 없음)",
+    text: bodyText,
+    attachments: attachments.map((attachment) => ({
+      filename: attachment.filename,
+      contentType: attachment.contentType,
+      path: attachment.path
+    }))
+  };
+
+  if (process.env.SMTP_URL) {
+    const transporter = nodemailer.createTransport(process.env.SMTP_URL);
+    await transporter.sendMail(mail);
+    return { attempted: true, ok: true, detail: "Postfix 접수 완료" };
+  }
+
+  const sendmailPath = process.env.SENDMAIL_PATH || "/usr/sbin/sendmail";
+  if (fs.existsSync(sendmailPath)) {
+    const transporter = nodemailer.createTransport({
+      sendmail: true,
+      newline: "unix",
+      path: sendmailPath
+    });
+    await transporter.sendMail(mail);
+    return { attempted: true, ok: true, detail: "sendmail 발송 완료" };
+  }
+
+  return { attempted: false, ok: false, detail: "SMTP_URL 또는 sendmail을 찾을 수 없습니다." };
+}
+
+async function handleSend(req, res) {
+  const startedAt = Date.now();
+  const context = requestContext(req, "/api/send");
+  await ensureDirs();
+
+  const contentType = req.headers["content-type"] || "";
+  if (!contentType.includes("multipart/form-data")) {
+    auditWarn("mail.send.invalid_content_type", {
+      ...context,
+      status: 415,
+      contentType,
+      durationMs: Date.now() - startedAt
+    });
+    sendText(res, 415, "multipart/form-data 요청만 지원합니다.");
+    return;
+  }
+
+  const requestId = generatedId();
+  const tmpDir = path.join(TMP_ROOT, requestId);
+  await fsp.mkdir(tmpDir, { recursive: true });
+
+  const fields = {
+    from: "",
+    to: "",
+    subject: "",
+    body: ""
+  };
+  const uploaded = [];
+  const fileWrites = [];
+  let totalBytes = 0;
+  let responded = false;
+
+  const fail = async (status, message) => {
+    if (responded) return;
+    responded = true;
+    req.unpipe();
+    req.resume();
+    await removeDir(tmpDir);
+    auditWarn("mail.send.rejected", {
+      ...context,
+      status,
+      reason: message,
+      from: normalizeSender(fields.from) || undefined,
+      recipientCount: splitAddresses(fields.to).length,
+      attachmentCount: uploaded.length,
+      attachmentBytes: totalBytes,
+      durationMs: Date.now() - startedAt
+    });
+    sendText(res, status, message);
+  };
+
+  const busboy = Busboy({
+    headers: req.headers,
+    limits: {
+      fileSize: MAX_ATTACHMENT_BYTES,
+      fieldSize: 20 * 1024 * 1024
+    }
+  });
+
+  busboy.on("field", (name, value) => {
+    if (Object.hasOwn(fields, name)) {
+      fields[name] = value;
+    }
+  });
+
+  busboy.on("file", (name, file, info) => {
+    if (name !== "attachments" || !info.filename) {
+      file.resume();
+      return;
+    }
+
+    const attachmentId = generatedId();
+    const outputPath = path.join(tmpDir, attachmentId);
+    const output = fs.createWriteStream(outputPath, { flags: "wx" });
+    const attachment = {
+      id: attachmentId,
+      filename: path.basename(info.filename),
+      contentType: info.mimeType || "application/octet-stream",
+      size: 0,
+      storedName: attachmentId,
+      tempPath: outputPath
+    };
+
+    file.on("data", (chunk) => {
+      attachment.size += chunk.length;
+      totalBytes += chunk.length;
+      if (attachment.size > MAX_ATTACHMENT_BYTES || totalBytes > MAX_ATTACHMENT_BYTES) {
+        file.unpipe(output);
+        output.destroy();
+        void fail(413, "첨부파일은 1GB를 초과할 수 없습니다.");
+      }
+    });
+
+    file.on("limit", () => {
+      file.unpipe(output);
+      output.destroy();
+      void fail(413, "첨부파일은 1GB를 초과할 수 없습니다.");
+    });
+
+    file.pipe(output);
+
+    fileWrites.push(
+      new Promise((resolve, reject) => {
+        output.on("finish", () => {
+          if (!responded && attachment.size > 0) {
+            uploaded.push(attachment);
+          }
+          resolve();
+        });
+        output.on("error", (error) => {
+          if (responded) resolve();
+          else reject(error);
+        });
+        file.on("error", (error) => {
+          if (responded) resolve();
+          else reject(error);
+        });
+      })
+    );
+  });
+
+  busboy.on("error", () => {
+    auditWarn("mail.send.parse_failure", {
+      ...context,
+      durationMs: Date.now() - startedAt
+    });
+    void fail(400, "메일 요청을 처리할 수 없습니다.");
+  });
+
+  busboy.on("finish", async () => {
+    if (responded) return;
+
+    try {
+      await Promise.all(fileWrites);
+
+      const to = splitAddresses(fields.to).map(normalizeRecipient);
+      if (to.length === 0) {
+        await fail(400, "받는 사람을 입력해야 합니다.");
+        return;
+      }
+
+      const messageId = generatedId();
+      const messageDir = path.join(MAIL_ROOT, "sent", messageId);
+      const attachmentDir = path.join(messageDir, "attachments");
+      await fsp.mkdir(attachmentDir, { recursive: true });
+
+      const attachments = [];
+      for (const item of uploaded) {
+        const finalPath = path.join(attachmentDir, item.storedName);
+        await fsp.rename(item.tempPath, finalPath);
+        attachments.push({
+          id: item.id,
+          filename: item.filename,
+          contentType: item.contentType,
+          size: item.size,
+          storedName: item.storedName,
+          path: finalPath
+        });
+      }
+
+      const bodyText = fields.body || "";
+      const meta = {
+        id: messageId,
+        box: "sent",
+        from: normalizeSender(fields.from),
+        to,
+        subject: fields.subject || "",
+        date: new Date().toISOString(),
+        attachments: attachments.map(({ path: _path, ...attachment }) => attachment)
+      };
+
+      try {
+        meta.delivery = await sendViaConfiguredTransport(meta, bodyText, attachments);
+      } catch (error) {
+        meta.delivery = {
+          attempted: true,
+          ok: false,
+          detail: error instanceof Error ? error.message : "발송 실패"
+        };
+        auditError("mail.send.smtp_failure", {
+          ...context,
+          actor: meta.from || context.actor,
+          messageId,
+          from: meta.from,
+          recipientCount: meta.to.length,
+          recipientDomains: [...new Set(meta.to.map((recipient) => recipient.split("@")[1]).filter(Boolean))],
+          attachmentCount: attachments.length,
+          attachmentBytes: attachments.reduce((sum, attachment) => sum + attachment.size, 0),
+          error
+        });
+      }
+
+      await Promise.all([
+        fsp.writeFile(path.join(messageDir, "meta.json"), JSON.stringify(meta, null, 2)),
+        fsp.writeFile(path.join(messageDir, "body.txt"), bodyText),
+        fsp.writeFile(path.join(messageDir, "body.html"), textToHtml(bodyText))
+      ]);
+      await removeDir(tmpDir);
+
+      auditLog(meta.delivery?.ok ? "INFO" : "WARN", meta.delivery?.ok ? "mail.send.success" : "mail.send.delivery_unavailable", {
+        ...context,
+        actor: meta.from || context.actor,
+        messageId,
+        from: meta.from,
+        recipientCount: meta.to.length,
+        recipientDomains: [...new Set(meta.to.map((recipient) => recipient.split("@")[1]).filter(Boolean))],
+        attachmentCount: attachments.length,
+        attachmentBytes: attachments.reduce((sum, attachment) => sum + attachment.size, 0),
+        deliveryAttempted: meta.delivery?.attempted || false,
+        deliveryOk: meta.delivery?.ok || false,
+        durationMs: Date.now() - startedAt
+      });
+      redirect(res, `/mail/sent/${messageId}`);
+    } catch (error) {
+      await removeDir(tmpDir);
+      auditLog(responded ? "WARN" : "ERROR", "mail.send.storage_failure", {
+        ...context,
+        status: 500,
+        from: normalizeSender(fields.from) || undefined,
+        recipientCount: splitAddresses(fields.to).length,
+        attachmentCount: uploaded.length,
+        attachmentBytes: totalBytes,
+        error,
+        durationMs: Date.now() - startedAt
+      });
+      sendText(res, 500, error instanceof Error ? error.message : "메일을 저장할 수 없습니다.");
+    }
+  });
+
+  req.pipe(busboy);
+}
+
+async function handleDownload(req, res, pathname) {
+  const startedAt = Date.now();
+  const context = requestContext(req, pathname);
+  const match = pathname.match(/^\/api\/mail\/([^/]+)\/([^/]+)\/attachments\/([^/]+)$/);
+  if (!match) return false;
+
+  const [, box, messageId, attachmentId] = match;
+  if (!boxLabels.has(box)) {
+    auditWarn("mail.attachment.invalid_box", {
+      ...context,
+      box,
+      messageId,
+      attachmentId,
+      status: 404,
+      durationMs: Date.now() - startedAt
+    });
+    sendText(res, 404, "메일함을 찾을 수 없습니다.");
+    return true;
+  }
+
+  try {
+    const safeMessageId = safeSegment(messageId);
+    const safeAttachmentId = safeSegment(attachmentId);
+    const messageDir = path.join(MAIL_ROOT, box, safeMessageId);
+    const meta = JSON.parse(await fsp.readFile(path.join(messageDir, "meta.json"), "utf8"));
+    const attachment = meta.attachments.find((item) => item.id === safeAttachmentId);
+    if (!attachment) {
+      auditWarn("mail.attachment.not_found", {
+        ...context,
+        box,
+        messageId,
+        attachmentId,
+        status: 404,
+        durationMs: Date.now() - startedAt
+      });
+      sendText(res, 404, "첨부파일을 찾을 수 없습니다.");
+      return true;
+    }
+
+    const filePath = path.join(messageDir, "attachments", safeSegment(attachment.storedName));
+    const stat = await fsp.stat(filePath);
+    const encodedName = encodeURIComponent(attachment.filename);
+    res.writeHead(200, {
+      "Content-Type": attachment.contentType || "application/octet-stream",
+      "Content-Length": stat.size,
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodedName}`
+    });
+    auditLog("INFO", "mail.attachment.download", {
+      ...context,
+      box,
+      messageId,
+      attachmentId,
+      attachmentBytes: stat.size,
+      contentType: attachment.contentType || "application/octet-stream",
+      durationMs: Date.now() - startedAt
+    });
+    fs.createReadStream(filePath).pipe(res);
+  } catch (error) {
+    auditError("mail.attachment.failure", {
+      ...context,
+      box,
+      messageId,
+      attachmentId,
+      status: 404,
+      error,
+      durationMs: Date.now() - startedAt
+    });
+    sendText(res, 404, "첨부파일을 찾을 수 없습니다.");
+  }
+
+  return true;
+}
+
+await ensureDirs();
+await app.prepare();
+
+http
+  .createServer(async (req, res) => {
+    const parsedUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+    const pathname = parsedUrl.pathname;
+
+    if (req.method === "POST" && pathname === "/api/send") {
+      await handleSend(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && (await handleAuth(req, res, pathname))) {
+      return;
+    }
+
+    if (req.method === "GET" && (await handleDownload(req, res, pathname))) {
+      return;
+    }
+
+    await handle(req, res);
+  })
+  .listen(port, hostname, () => {
+    auditLog("INFO", "server.start", {
+      hostname,
+      port,
+      nodeEnv: process.env.NODE_ENV || "development",
+      dataDir: DATA_DIR
+    });
+  });
