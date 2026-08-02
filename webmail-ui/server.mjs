@@ -5,8 +5,10 @@ import path from "path";
 import crypto from "crypto";
 import next from "next";
 import Busboy from "busboy";
+import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { isValidUserId, normalizeUserId, sessionToken, verifySessionToken } from "./auth-core.mjs";
+import { mergeDovecotUser, mergePostfixAccounts, parseDomains, parseDovecotUsers } from "./account-core.mjs";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.BIND_HOST || "0.0.0.0";
@@ -17,10 +19,13 @@ const handle = app.getRequestHandler();
 const DATA_DIR = process.env.MAIL_DATA_DIR || path.join(process.cwd(), "data");
 const MAIL_ROOT = path.join(DATA_DIR, "mail");
 const TMP_ROOT = path.join(DATA_DIR, "tmp");
-const USERS_PATH = path.join(DATA_DIR, "users.json");
-const VIRTUAL_USERS_PATH = process.env.MAIL_VIRTUAL_USERS_PATH || "";
+const ACCOUNT_DIR = process.env.MAIL_ACCOUNT_DIR || path.join(DATA_DIR, "accounts");
+const DOVECOT_USERS_PATH = path.join(ACCOUNT_DIR, "dovecot-users");
+const POSTFIX_ACCOUNTS_PATH = path.join(ACCOUNT_DIR, "virtual-mailbox-accounts");
+const ACCOUNT_LOCK_PATH = path.join(ACCOUNT_DIR, ".signup.lock");
 const MAX_ATTACHMENT_BYTES = 1024 * 1024 * 1024;
 const DEFAULT_MAIL_DOMAIN = process.env.MAIL_DEFAULT_DOMAIN || "ds-mail.p-e.kr";
+const MAIL_DOMAINS = parseDomains(process.env.MAIL_DOMAINS || DEFAULT_MAIL_DOMAIN);
 const AUTH_COOKIE = "mailbox_user";
 const SESSION_SECRET = process.env.WEBMAIL_SESSION_SECRET || (dev ? "local-development-only" : "");
 const SIGNUP_TOKEN = process.env.WEBMAIL_SIGNUP_TOKEN || (dev ? "local-signup-token" : "");
@@ -156,26 +161,6 @@ function requestUserId(req) {
   return "";
 }
 
-function passwordHash(password, salt) {
-  return new Promise((resolve, reject) => {
-    crypto.scrypt(password, salt, 64, (error, derivedKey) => {
-      if (error) reject(error);
-      else resolve(derivedKey.toString("base64url"));
-    });
-  });
-}
-
-async function passwordRecord(userId, password) {
-  const salt = crypto.randomBytes(16).toString("base64url");
-  return { id: userId, salt, passwordHash: await passwordHash(password, salt) };
-}
-
-async function passwordMatches(user, password) {
-  const actual = await passwordHash(password, user.salt);
-  if (actual.length !== user.passwordHash.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(user.passwordHash));
-}
-
 function generatedId() {
   return `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
 }
@@ -191,46 +176,89 @@ async function ensureDirs() {
   ]);
 }
 
-async function readUsers() {
+async function ensureAccountFiles() {
+  await fsp.mkdir(ACCOUNT_DIR, { recursive: true });
+  if (dev) {
+    await Promise.all([
+      fsp.writeFile(DOVECOT_USERS_PATH, "# MailBox development accounts\n", { flag: "wx", mode: 0o640 }).catch((error) => {
+        if (error?.code !== "EEXIST") throw error;
+      }),
+      fsp.writeFile(POSTFIX_ACCOUNTS_PATH, "# MailBox development recipient map\n", { flag: "wx", mode: 0o640 }).catch((error) => {
+        if (error?.code !== "EEXIST") throw error;
+      })
+    ]);
+    return;
+  }
+  await Promise.all([fsp.access(DOVECOT_USERS_PATH), fsp.access(POSTFIX_ACCOUNTS_PATH)]);
+}
+
+async function readAccountFiles() {
+  const [dovecotUsers, postfixAccounts] = await Promise.all([
+    fsp.readFile(DOVECOT_USERS_PATH, "utf8"),
+    fsp.readFile(POSTFIX_ACCOUNTS_PATH, "utf8")
+  ]);
+  return { dovecotUsers, postfixAccounts };
+}
+
+async function passwordMatchesAccount(userId, password) {
+  const raw = await fsp.readFile(DOVECOT_USERS_PATH, "utf8").catch(() => "");
+  const account = parseDovecotUsers(raw).find((item) => item.id === userId);
+  if (!account) return false;
+  if (!account.passwordHash.startsWith("{BLF-CRYPT}")) return false;
+  return bcrypt.compare(password, account.passwordHash.slice("{BLF-CRYPT}".length));
+}
+
+async function atomicWrite(filePath, content) {
+  const tempPath = `${filePath}.${generatedId()}.tmp`;
+  await fsp.writeFile(tempPath, content, { encoding: "utf8", mode: 0o640, flag: "wx" });
+  await fsp.rename(tempPath, filePath);
+}
+
+async function withAccountLock(callback) {
+  await fsp.mkdir(ACCOUNT_DIR, { recursive: true });
+  let handle;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      handle = await fsp.open(ACCOUNT_LOCK_PATH, "wx", 0o600);
+      break;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      const stat = await fsp.stat(ACCOUNT_LOCK_PATH).catch(() => null);
+      if (stat && Date.now() - stat.mtimeMs > 30_000) {
+        await fsp.unlink(ACCOUNT_LOCK_PATH).catch(() => {});
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  }
+  if (!handle) throw new Error("Account store is busy");
   try {
-    const raw = await fsp.readFile(USERS_PATH, "utf8");
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item) =>
-        item &&
-        typeof item === "object" &&
-        isValidUserId(item.id) &&
-        typeof item.salt === "string" &&
-        typeof item.passwordHash === "string"
-    );
-  } catch {
-    return [];
+    return await callback();
+  } finally {
+    await handle.close().catch(() => {});
+    await fsp.unlink(ACCOUNT_LOCK_PATH).catch(() => {});
   }
 }
 
-async function readVirtualUsers() {
-  if (!VIRTUAL_USERS_PATH) return [];
-  try {
-    const raw = await fsp.readFile(VIRTUAL_USERS_PATH, "utf8");
-    return raw
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith("#"))
-      .map((line) => normalizeUserId(line.split(/\s+/)[0]?.split("@")[0]))
-      .filter(isValidUserId);
-  } catch {
-    return [];
-  }
-}
-
-async function readKnownUsers() {
-  const [users, virtualUsers] = await Promise.all([readUsers(), readVirtualUsers()]);
-  return [...new Set([...users.map((user) => user.id), ...virtualUsers])].sort();
-}
-
-async function writeUsers(users) {
-  await fsp.writeFile(USERS_PATH, JSON.stringify([...users].sort((a, b) => a.id.localeCompare(b.id)), null, 2));
+async function provisionAccount(userId, password) {
+  return withAccountLock(async () => {
+    const { dovecotUsers, postfixAccounts } = await readAccountFiles();
+    if (parseDovecotUsers(dovecotUsers).some((account) => account.id === userId)) {
+      const error = new Error("Account already exists");
+      error.code = "ACCOUNT_EXISTS";
+      throw error;
+    }
+    const passwordHash = `{BLF-CRYPT}${await bcrypt.hash(password, 12)}`;
+    const nextDovecotUsers = mergeDovecotUser(dovecotUsers, userId, passwordHash);
+    const nextPostfixAccounts = mergePostfixAccounts(postfixAccounts, userId, MAIL_DOMAINS);
+    await atomicWrite(DOVECOT_USERS_PATH, nextDovecotUsers);
+    try {
+      await atomicWrite(POSTFIX_ACCOUNTS_PATH, nextPostfixAccounts);
+    } catch (error) {
+      await atomicWrite(DOVECOT_USERS_PATH, dovecotUsers);
+      throw error;
+    }
+    return { addressCount: MAIL_DOMAINS.length, domains: MAIL_DOMAINS };
+  });
 }
 
 async function parseUrlEncodedForm(req) {
@@ -313,20 +341,31 @@ async function handleAuth(req, res, pathname) {
     return true;
   }
 
-  const users = await readUsers();
-  const knownUsers = await readKnownUsers();
-  const registeredUser = users.find((user) => user.id === userId);
-
-  if (pathname === "/api/auth/login" && (!registeredUser || !(await passwordMatches(registeredUser, password)))) {
-    auditWarn("auth.login.invalid_credentials", {
-      ...context,
-      userId,
-      durationMs: Date.now() - startedAt
-    });
-    redirect(res, "/login?error=invalid_credentials");
-    return true;
+  if (pathname === "/api/auth/login") {
+    try {
+      if (!(await passwordMatchesAccount(userId, password))) {
+        auditWarn("auth.login.invalid_credentials", {
+          ...context,
+          userId,
+          durationMs: Date.now() - startedAt
+        });
+        redirect(res, "/login?error=invalid_credentials");
+        return true;
+      }
+    } catch (error) {
+      auditError("auth.login.backend_failure", {
+        ...context,
+        userId,
+        status: 503,
+        error,
+        durationMs: Date.now() - startedAt
+      });
+      redirect(res, "/login?error=unavailable");
+      return true;
+    }
   }
 
+  let provisionedAccount;
   if (pathname === "/api/auth/signup") {
     const validSignupToken =
       signupToken.length === SIGNUP_TOKEN.length &&
@@ -340,25 +379,28 @@ async function handleAuth(req, res, pathname) {
       redirect(res, "/signup?error=weak_password");
       return true;
     }
-    if (registeredUser) {
-      auditWarn("auth.signup.exists", {
+    try {
+      provisionedAccount = await provisionAccount(userId, password);
+    } catch (error) {
+      if (error?.code === "ACCOUNT_EXISTS") {
+        auditWarn("auth.signup.exists", {
+          ...context,
+          userId,
+          durationMs: Date.now() - startedAt
+        });
+        redirect(res, "/signup?error=exists");
+        return true;
+      }
+      auditError("auth.signup.provision_failure", {
         ...context,
         userId,
+        status: 503,
+        error,
         durationMs: Date.now() - startedAt
       });
-      redirect(res, "/signup?error=exists");
+      redirect(res, "/signup?error=unavailable");
       return true;
     }
-    if (!knownUsers.includes(userId)) {
-      auditWarn("auth.signup.unknown_mailbox", {
-        ...context,
-        userId,
-        durationMs: Date.now() - startedAt
-      });
-      redirect(res, "/signup?error=unknown_mailbox");
-      return true;
-    }
-    await writeUsers([...users, await passwordRecord(userId, password)]);
   }
 
   setAuthCookie(res, userId);
@@ -366,6 +408,8 @@ async function handleAuth(req, res, pathname) {
     ...context,
     actor: userId,
     userId,
+    addressCount: provisionedAccount?.addressCount,
+    domains: provisionedAccount?.domains,
     durationMs: Date.now() - startedAt
   });
   redirect(res, "/inbox");
@@ -737,7 +781,7 @@ function messageOwnedByUser(meta, userId) {
   return Array.isArray(meta.to) && meta.to.some((recipient) => addressBelongsToUser(recipient, userId));
 }
 
-await ensureDirs();
+await Promise.all([ensureDirs(), ensureAccountFiles()]);
 await app.prepare();
 
 http

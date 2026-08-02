@@ -30,6 +30,8 @@ docker compose -f docker-compose.prod.yml logs -f mailbox-webmail-ui
 docker compose -f docker-compose.prod.yml restart
 ```
 
+계정과 수신 주소는 `mailbox-account-store` named volume에 있으므로 컨테이너 restart, recreate, image rebuild 후에도 유지된다. `docker compose down -v` 또는 volume의 명시적 삭제는 계정을 제거하므로 백업 없이 실행하지 않는다.
+
 ## 코드와 이미지 교체
 
 검증된 commit을 checkout한 뒤 운영 이미지를 다시 빌드하고 컨테이너를 재생성한다.
@@ -52,6 +54,13 @@ docker build -t <registry>/mailbox-webmail-ui:<release_tag> webmail-ui
 docker push <registry>/mailbox-webmail-ui:<release_tag>
 ```
 
-## 수신 주소 관리
+## 계정과 수신 주소 관리
 
-수신 주소는 `smtp-receiver/virtual-mailbox-accounts`에서 관리한다. 개발·운영 Compose는 이 파일을 SMTP와 Webmail에 읽기 전용으로 마운트한다. 변경 후 SMTP 컨테이너를 재시작하고 새 사용자의 가입 가능 여부를 확인한다.
+사용자가 Webmail에서 가입하면 `mailbox-account-store`의 Dovecot 사용자 파일과 Postfix 수신 주소 map이 함께 갱신된다. SMTP 컨테이너는 map 변경을 감지해 형식을 검증하고 `postmap`과 reload를 수행한다. 운영자는 정상 가입 후 다음을 확인한다.
+
+```bash
+docker compose -f docker-compose.prod.yml logs mailbox-webmail-ui | grep 'auth.signup.success'
+docker compose -f docker-compose.prod.yml logs mailbox-smtp-receiver
+```
+
+계정 파일을 호스트나 컨테이너에서 직접 수정하지 않는다. 복구가 필요하면 먼저 `mailbox-account-store` volume을 백업하고 두 계정 파일의 일관성을 함께 확인한다.

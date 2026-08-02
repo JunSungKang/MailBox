@@ -22,6 +22,14 @@ docker compose -f docker-compose.prod.yml logs mailbox-webmail-ui
 - DNS `MX` 레코드가 서버를 가리키는지 확인한다.
 - 클라우드 방화벽과 OS 방화벽에서 TCP 25번 인바운드가 열려 있는지 확인한다.
 - `mailbox-smtp-receiver` 로그에서 수신 주소 매핑 실패 여부를 확인한다.
+- 가입 직후라면 SMTP 로그에서 account map 검증 또는 `postmap` 실패를 확인한다.
+
+## 회원가입 또는 로그인 실패
+
+- Webmail 로그에서 `auth.signup.provision_failure`, `auth.signup.exists`, `auth.login.backend_failure` 이벤트를 확인한다.
+- `mailbox-account-store` volume이 세 컨테이너에 연결됐는지 Compose config로 확인한다.
+- Dovecot 사용자 파일과 Postfix 수신 주소 map의 소유권이 UID/GID `5000`에서 읽고 쓸 수 있는지 확인한다.
+- 기존 `users.json` 계정은 자동 변환되지 않으므로 운영 가입 코드로 다시 가입한다.
 
 ## 웹메일 접속 실패
 

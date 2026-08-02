@@ -34,21 +34,25 @@ webmail-ui/server.mjs -> auth-core.mjs + filesystem + SMTP transport
 smtp-receiver -> mailbox-store <- imap-mailbox
 webmail-ui -> mailbox-store (read-only import)
 webmail-ui -> smtp-receiver (SMTP submission)
+webmail-ui -> mailbox-account-store (account provisioning)
+smtp-receiver + imap-mailbox -> mailbox-account-store (runtime account read)
 ```
 
 SMTP나 IMAP 모듈이 Webmail 내부 파일을 import하거나, Webmail이 Postfix/Dovecot 설정 파일을 수정하는 방향은 금지한다.
 
 ## Security Invariants
 
-- 비밀번호는 salt가 있는 scrypt hash로만 저장한다.
+- 비밀번호는 Dovecot 호환 salted bcrypt(BLF-CRYPT) hash로만 저장하며 평문으로 기록하지 않는다.
 - `mailbox_user`는 HMAC 검증을 통과한 cookie만 신뢰한다.
-- 가입은 등록된 SMTP 사용자와 운영 가입 코드를 모두 요구한다.
+- 가입은 운영 가입 코드를 요구하며 Dovecot 사용자와 허용 domain의 Postfix 수신 주소를 함께 생성한다.
 - inbox, sent, bounced, detail, attachment, send는 현재 사용자 소유권을 검사한다.
 - `mailbox-store`는 Webmail에 read-only로 mount한다.
+- `mailbox-account-store`는 계정 원본이며 Webmail만 제한된 두 계정 파일을 갱신한다.
 
 ## Data Invariants
 
 - SMTP와 IMAP은 같은 `mailbox-store`의 Maildir을 공유한다.
 - Postfix queue는 `smtp-queue-store`, Webmail 변환 데이터와 사용자는 `webmail-data-store`에 둔다.
+- Dovecot 사용자와 Postfix 수신 주소 map은 `mailbox-account-store`에 보존한다.
 - `docker compose down`은 volume을 보존하고 `down -v`만 volume을 제거한다.
 - 생성된 release, packaging script, tracked sprint contract를 저장소에 추가하지 않는다.

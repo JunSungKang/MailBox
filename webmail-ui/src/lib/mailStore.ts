@@ -38,9 +38,9 @@ export type MailMessage = MailMeta & {
 };
 
 export const boxLabels: Record<MailBox, string> = {
-  inbox: "받은 메일함",
-  sent: "보낸 메일함",
-  bounced: "반송된 메일함"
+  inbox: "받은 편지",
+  sent: "보낸 편지",
+  bounced: "돌아온 편지"
 };
 
 export const dataDir = process.env.MAIL_DATA_DIR || path.join(process.cwd(), "data");
