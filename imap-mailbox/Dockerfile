@@ -1,20 +1,17 @@
-FROM debian:bookworm-slim
+FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update \
-  && apt-get upgrade -y \
-  && apt-get install -y --no-install-recommends ca-certificates dovecot-core dovecot-imapd \
-  && rm -rf /var/lib/apt/lists/*
+RUN apk upgrade --no-cache \
+  && apk add --no-cache ca-certificates dovecot icu-data-full \
+  && addgroup -g 1500 smtp-auth \
+  && addgroup -g 5000 vmail \
+  && adduser -D -H -u 5000 -G vmail -h /var/mail/vhosts -s /sbin/nologin vmail \
+  && find /usr /bin /sbin -type f -perm /6000 -exec chmod a-s {} +
 
 COPY dovecot.conf /etc/dovecot/dovecot.conf
 COPY users /etc/dovecot/users
 COPY entrypoint.sh /usr/local/bin/mailbox-imap-mailbox-entrypoint
 
 RUN chmod 0755 /usr/local/bin/mailbox-imap-mailbox-entrypoint \
-  && groupadd -g 1500 smtp-auth \
-  && groupadd -g 5000 vmail \
-  && useradd -u 5000 -g 5000 -d /var/mail/vhosts -s /usr/sbin/nologin vmail \
   && chown root:dovecot /etc/dovecot/users \
   && chmod 0640 /etc/dovecot/users
 

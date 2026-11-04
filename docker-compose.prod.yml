@@ -98,7 +98,10 @@ services:
       - mailbox-account-store:/accounts
 
   mailbox-webmail-proxy:
-    image: caddy:2.11.7-alpine@sha256:e70b164da81ef698b3ad19af799ea6086ce6d9e48ed4079eb9fe26f6fbf14ee5
+    image: mailbox-webmail-proxy:prod
+    build:
+      context: ./webmail-ui
+      dockerfile: Dockerfile.proxy
     container_name: mailbox-webmail-proxy
     restart: unless-stopped
     logging: *common-logging
@@ -112,12 +115,6 @@ services:
       - "${MAIL_WEB_HTTPS_PORT:-18443}:8443"
     volumes:
       - type: bind
-        source: ./webmail-ui/Caddyfile
-        target: /etc/caddy/Caddyfile
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
         source: ${MAIL_TLS_DIR:-./tls}
         target: /etc/mailbox/tls
         read_only: true
@@ -125,8 +122,7 @@ services:
           create_host_path: false
     read_only: true
     tmpfs:
-      - /data
-      - /config
+      - /var/cache/nginx
       - /tmp
 
 networks:

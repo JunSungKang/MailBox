@@ -4,15 +4,15 @@
 
 ## Project Summary
 
-이 프로젝트는 세 핵심 모듈로 동작하는 단일 노드 메일 서버다. Postfix가 SMTP 메일을 Maildir에 배달하고, Dovecot과 Next.js Webmail이 같은 메일 데이터를 각자의 인터페이스로 제공한다. 운영 실행은 Caddy HTTPS 프록시를 더해 네 컨테이너를 사용한다.
+이 프로젝트는 세 핵심 모듈로 동작하는 단일 노드 메일 서버다. Postfix가 SMTP 메일을 Maildir에 배달하고, Dovecot과 Next.js Webmail이 같은 메일 데이터를 각자의 인터페이스로 제공한다. 운영 실행은 Nginx HTTPS 프록시를 더해 네 컨테이너를 사용한다.
 
 ## Stack
 
 - SMTP: Postfix 3.11 on Alpine stable (Node.js는 비권한 계정 맵 감시기만 실행)
-- IMAP: Dovecot on Debian
+- IMAP: Dovecot 2.4 on Alpine stable (Maildir 저장 형식은 2.3 호환 유지)
 - Webmail: Node.js 24, Next.js 16, React 19, TypeScript 6
 - Mail parsing/sending: `mailparser`, `nodemailer`, `busboy`
-- 운영 Webmail HTTPS: Caddy
+- 운영 Webmail HTTPS: Nginx
 - Runtime composition: Docker Compose
 
 ## Directory Ownership

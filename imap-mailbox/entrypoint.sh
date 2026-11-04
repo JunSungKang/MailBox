@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 MAILBOX_ROOT="/var/mail/vhosts/mailbox/Maildir"
 ACCOUNT_DIR="/accounts"
@@ -17,4 +17,5 @@ chown vmail:vmail "$ACCOUNT_FILE"
 chmod 0640 "$ACCOUNT_FILE"
 
 install -d -m 0750 -o root -g smtp-auth /run/smtp-auth
+doveconf -n >/dev/null
 exec dovecot -F

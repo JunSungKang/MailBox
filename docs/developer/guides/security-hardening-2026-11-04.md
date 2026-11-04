@@ -1,4 +1,4 @@
-# MailBox SMTP 보안 검증 — 2026-11-04
+# MailBox 메일 서비스 보안 검증 — 2026-11-04
 
 ## 이미지 재검사
 
@@ -10,11 +10,12 @@ Trivy 0.76.1로 정확한 이미지 archive를 검사했다. 전체 심각도를
 | --- | ---: | ---: | ---: | ---: | ---: |
 | SMTP | 0 | 0 | 0 | 0 | 0 |
 | Webmail | 0 | 0 | 0 | 0 | 0 |
-| IMAP | 104 | 111 | 32 | 1 | 0 |
+| IMAP | 0 | 0 | 0 | 0 | 0 |
+| HTTPS proxy | 0 | 0 | 0 | 0 | 0 |
 
 SMTP는 Alpine 3.24.3 / Postfix 3.11.7로 교체했다. 앱은 Next.js 16.4.5, Nodemailer 10.3.1, MailParser 3.14.1과 수정된 의존성을 사용한다. 개발 의존성과 런타임에 불필요한 npm/Yarn을 제외했다. SMTP의 Node.js는 내장 모듈만 사용하는 비권한 맵 감시기에 필요하다.
 
-IMAP은 Dovecot 2.3 설정 호환성을 유지한 Debian 12 이미지에 SASL Unix socket을 추가했다. 원시 HIGH 32 / CRITICAL 1은 남아 있다. CRITICAL MiniZip은 설치 구성상 영향이 없다는 Debian 판정과 구분한다. IMAP의 다른 패키지 전체에 대한 영향 분석·패치를 완료했거나 MailBox 전체가 0건이라고 해석하면 안 된다.
+IMAP은 후속 수정으로 Alpine 3.24.3 / Dovecot 2.4.5로 교체했다. 이전 IMAP 이미지의 HIGH 32 / CRITICAL 1을 다시 재현한 뒤, 새 이미지의 전체 심각도 재검사에서 0건을 확인했다. 기존에 남겨 두었던 IMAP 고위험 검출을 이번 후속 작업에서 해소했다. SMTP·Webmail도 같은 최신 DB로 함께 재검사했다.
 
 ## 기존 SMTP의 고위험 10종
 
@@ -81,34 +82,60 @@ trivy image --scanners vuln --format json --output <workspace>/reports/smtp.json
 
 이미지를 다시 빌드하거나 태그가 바뀌면 해당 이미지 ID로 재검사한다. 런타임 manifest ID와 scanner config ID는 archive의 `index.json`/`manifest.json`으로 연결해 검증했다.
 
+## IMAP 후속 수정과 호환성 검증
+
+이전 IMAP의 고위험 원시 33행은 CVE 9종이다. CRITICAL MiniZip은 정확한 이전 IMAP 이미지에서도 관련 바이너리·심볼이 없어 영향 없음으로 판정했다. 나머지 ncurses, systemd, GNU gzip, util-linux, libacl, Perl source 패키지는 새 이미지의 의존성에서 제거됐으며 같은 CVE가 새 이미지에서 검출되지 않았다. 단순히 CVE를 제외하거나 미사용으로 표시해 수치를 낮추지 않았다.
+
+Dovecot 2.4 설정 문법으로 TLS 인증서·키, passwd-file, 사용자명 변수와 Maildir 경로를 전환했다. `dovecot_storage_version=2.3.0`으로 이전 2.3 인스턴스가 index를 읽을 수 있는 호환성을 유지한다. [공식 전환 안내](https://doc.dovecot.org/2.4.1/installation/upgrade/2.3-to-2.4.html), [저장 형식 버전](https://doc.dovecot.org/2.4.1/core/summaries/settings.html#dovecot_storage_version).
+
+운영 volume의 읽기 전용 복사본과 격리 fixture에서 다음을 검증했다.
+
+- 2.3 → 2.4 → 2.3 롤백 → 2.4 재전환 모두 기존 UIDVALIDITY, UID, 메일 수, 읽음 상태 보존.
+- TLS 전 IMAP 로그인 거절, 인증서·호스트 검증을 통과한 STARTTLS와 기존 BLF-CRYPT 계정 로그인 성공.
+- 복사된 기존 서비스 계정으로 Postfix SASL 인증 성공. 일반 계정·비인증 주체의 중계 거부와 전용 계정 제출, Maildir 배달 재검증 통과.
+- `doveconf -n`으로 새 설정 검증. 계정 hash와 원본 Maildir 메일 내용의 SHA-256을 운영 교체 전후 비교.
+
+후속 원시 검사와 호환성 증거는 로컬 `.agents/imap-hardening/reports/`에 보존한다.
+
+한글 검색과 과거 문자셋 지원을 위해 ICU 전체 데이터를 포함하고, UTF-8 제목·EUC-KR 본문 검색을 별도 fixture로 검증했다.
+
+## HTTPS 프록시 후속 검사
+
+이전 Caddy 2.11.7 이미지에서도 원시 HIGH 9 / CRITICAL 1을 확인했다. CVE ID 중복 제거 시 7종이다. Brotli와 curl, Go 표준 라이브러리, x/net, go-jose v3/v4에서 검출됐다. 설치된 최신 Caddy 이미지에도 같은 의존성이 남았고 새 upstream 2.11.8의 공식 컨테이너는 아직 제공되지 않았다. v2.11.8 source에도 패치 버전이 없는 go-jose v3 의존성이 남아 있어 버전 번호만 바꾸지 않았다. [Caddy release](https://github.com/caddyserver/caddy/releases/tag/v2.11.8), [go-jose 공식 권고](https://github.com/go-jose/go-jose/security/advisories/GHSA-mgcc-cww5-fp2q).
+
+현재 사용하는 명시적 인증서 HTTPS reverse proxy와 HTTP 308 이동 기능을 Nginx 1.30.6으로 전환했다. Alpine 패키지를 갱신한 새 프록시의 재검사는 전체 심각도 0건이다. 기존 공개 포트·인증서·백엔드와 read-only 실행을 유지한다. 런타임 설정과 임시 파일은 tmpfs만 사용한다.
+
+격리 환경에서 HTTP URI/query를 보존한 308 이동, 검증된 HTTPS, 잘못된 호스트명/신뢰 체인 거절, 로그인과 받은편지함, Secure/HttpOnly/SameSite 쿠키를 확인했다. 클라이언트가 보낸 X-Forwarded-For를 신뢰하지 않고 실제 접속 IP로 덮어쓰는 것도 검사했다. 새 proxy 접근 로그는 비밀번호·쿠키·인증 헤더·메일 본문 없이 JSON으로 기록한다.
+
 ## Image binding evidence
 
 DB UpdatedAt: `2026-11-04T01:28:23.13686565Z`
 
 ```json
 {
+  "imap-mailbox": {
+    "runtimeImageId": "sha256:df3e0026834877a66540c188725291406fe9a9f5d01b49fd3f65e75ddd2f7fa7",
+    "scanImageId": "sha256:59adfbf5da17d5c10684a612bcceebbddf74fe5c5c82f557054c712abcc28dbc",
+    "severity": {},
+    "reportSha256": "e23ce20fee7666dfaf3845cca63382e75f94ba31d7b242dbab299ee10f1679b8"
+  },
   "smtp-receiver": {
     "runtimeImageId": "sha256:a2392bb2ab623efe485b6a3e9abc956aebc3930130b1350d73f8fe8a1d1df1ad",
     "scanImageId": "sha256:45a9ca8f8e068a5050adf4eb007b42ac31e406cc922864b3996e9850ed85d03f",
     "severity": {},
-    "reportSha256": "6459042a0076e298a3f909f0d98858ee222e4cdf2af65056e2eaf29641c14fd6"
-  },
-  "imap-mailbox": {
-    "runtimeImageId": "sha256:58fc5c5fb05c20ace3774c6ed303dbdca73fbe9154527fec357e668d9668836d",
-    "scanImageId": "sha256:82107823e91d6d8bad58a01eaa879ffda986348257d25328e6d9d566ac4ed64b",
-    "severity": {
-      "LOW": 104,
-      "HIGH": 32,
-      "MEDIUM": 111,
-      "CRITICAL": 1
-    },
-    "reportSha256": "a4b7a0a053bf6b4dded8f57e8a0d3dec55451f220a327ec95e1ca97c8cbd1e59"
+    "reportSha256": "a6d1794df50babd38d0597adf9e0bb1f921cb6427c0a6efe6964fb33c0f44099"
   },
   "webmail-ui": {
     "runtimeImageId": "sha256:d0e3dabbda041a499437791f6f489a402271c5e5e02225497f8cafd03d13003a",
     "scanImageId": "sha256:fc3fb52adccd53c95f902e91ea021a3b8b60ac9386e7772ecb0116e7b34485c6",
     "severity": {},
-    "reportSha256": "286f22e21089a4256ce65ebf94cbc35016d17973fc4585770359aaca0a1990bd"
+    "reportSha256": "60604379831e89caf19f8c292550902040fd4be3496a19a00857c2dbf6040e43"
+  },
+  "webmail-proxy": {
+    "runtimeImageId": "sha256:3482c6278f61c681bc53ca09a8dc79b24738888b986fe5575ff889bfc275dc9b",
+    "scanImageId": "sha256:d592077708298f957acd477bcd3b085e341993bebb91abac0b3537a67090fd1a",
+    "severity": {},
+    "reportSha256": "81330fbed29a5d448f502c5a3419ca5bbf319bb10c71fb6e558c6d9eca082764"
   }
 }
 ```

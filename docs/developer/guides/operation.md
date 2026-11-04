@@ -53,7 +53,7 @@ openssl s_client -starttls imap -connect <호스트>:143 -servername <호스트>
 openssl s_client -starttls smtp -connect <호스트>:25 -servername <호스트> -verify_hostname <호스트> -verify_return_error -CAfile <공개-CA-인증서>
 ```
 
-위 명령은 domain 접속 기준이다. IP로 검증할 때는 `-verify_hostname` 대신 `-verify_ip`를 사용한다. 공인 CA 인증서는 시스템 CA 저장소를 사용할 수 있다. `MAIL_TLS_DIR`의 서버 인증서·키를 새 쌍으로 교체한 뒤 다음을 실행한다. Caddy 관리 API는 비활성화돼 있으므로 프록시는 restart로 인증서를 다시 읽는다.
+위 명령은 domain 접속 기준이다. IP로 검증할 때는 `-verify_hostname` 대신 `-verify_ip`를 사용한다. 공인 CA 인증서는 시스템 CA 저장소를 사용할 수 있다. `MAIL_TLS_DIR`의 서버 인증서·키를 새 쌍으로 교체한 뒤 다음을 실행한다. 프록시는 restart로 인증서를 다시 읽는다.
 
 ```bash
 docker compose -f docker-compose.prod.yml exec mailbox-smtp-receiver postfix reload
@@ -85,4 +85,8 @@ docker compose -f docker-compose.prod.yml logs mailbox-smtp-receiver
 
 ## 보안 점검
 
-[2026-11-04 보안 검증](security-hardening-2026-11-04.md)에 이미지별 검사 결과, 남은 패키지 경고와 필요한 root 권한을 기록했다. `smtp_tls_security_level=verify` 때문에 TLS 미지원·인증서 오류가 있는 외부 목적지는 지연 배달된다. 평문으로 완화하지 말고 `status=deferred` 사유와 목적지 TLS를 확인한다. SMTP 전용 계정 교체는 가입 API로 새 사용자를 만든 뒤 `SMTP_AUTH_USER`·비밀번호를 함께 교체하고 서비스를 재생성한다.
+[2026-11-04 보안 검증](security-hardening-2026-11-04.md)에 이미지별 검사 결과와 필요한 root 권한을 기록했다. `smtp_tls_security_level=verify` 때문에 TLS 미지원·인증서 오류가 있는 외부 목적지는 지연 배달된다. 평문으로 완화하지 말고 `status=deferred` 사유와 목적지 TLS를 확인한다. SMTP 전용 계정 교체는 가입 API로 새 사용자를 만든 뒤 `SMTP_AUTH_USER`·비밀번호를 함께 교체하고 서비스를 재생성한다.
+
+## Dovecot 2.4 전환과 롤백
+
+IMAP 이미지는 Alpine stable의 Dovecot 2.4를 사용한다. 2.3 설정을 그대로 복사하지 말고 저장소의 2.4 설정을 사용한다. `dovecot_storage_version=2.3.0`은 기존 index와 롤백 호환성을 위해 유지한다. image 재빌드 시 `doveconf -n`, 기존 bcrypt 계정의 STARTTLS 로그인, Maildir UIDVALIDITY·UID·읽음 상태, Postfix SASL을 격리 환경에서 함께 확인한다. 변경 이미지의 취약점 검사도 다시 수행한다.

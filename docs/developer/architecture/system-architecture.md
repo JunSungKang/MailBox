@@ -7,7 +7,7 @@
 - `smtp-receiver`: 인터넷 SMTP 요청을 받아 Postfix가 Maildir에 배달한다.
 - `imap-mailbox`: 같은 Maildir volume을 Dovecot IMAP으로 제공한다.
 - `webmail-ui`: Maildir을 읽어 자체 메일 저장소로 가져오고 SMTP 수신기에 발송을 요청한다.
-- 운영 `mailbox-webmail-proxy`: `webmail-ui/Caddyfile`을 읽는 Caddy 컨테이너로 Webmail HTTPS 연결을 처리한다.
+- 운영 `mailbox-webmail-proxy`: `webmail-ui/nginx.conf.template`을 사용하는 Nginx 컨테이너로 Webmail HTTPS 연결을 처리한다.
 
 각 모듈은 자신의 Dockerfile과 설정을 소유한다. 루트 Docker Compose만 모듈 사이의 네트워크, volume, 포트와 환경변수를 조립한다.
 
