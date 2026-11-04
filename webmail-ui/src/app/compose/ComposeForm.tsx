@@ -25,7 +25,7 @@ export default function ComposeForm({ userId, defaultTo, defaultSubject }: Compo
       </div>
       <div className="field">
         <label htmlFor="subject">제목</label>
-        <input id="subject" name="subject" type="text" defaultValue={defaultSubject} placeholder="어떤 이야기를 전할까요?" />
+        <input id="subject" name="subject" type="text" defaultValue={defaultSubject} placeholder="다음 이야기는 무엇인가요?" />
       </div>
       <div className="field">
         <label htmlFor="body">편지 내용</label>
@@ -39,7 +39,7 @@ export default function ComposeForm({ userId, defaultTo, defaultSubject }: Compo
       <div className="actions">
         <a className="textLink" href="/inbox">취소</a>
         <button className="button" type="submit" disabled={sending} aria-busy={sending}>
-          {sending ? "편지를 보내는 중…" : "하늘로 보내기"}
+          {sending ? "편지를 보내는 중…" : "편지 보내기"}
         </button>
       </div>
     </form>

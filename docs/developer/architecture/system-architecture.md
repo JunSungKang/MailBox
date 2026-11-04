@@ -1,12 +1,13 @@
 # MailBox System Architecture
 
-문서 최신화 기준일: 2026-08-02
+문서 최신화 기준일: 2026-11-04
 
 ## 모듈 경계
 
 - `smtp-receiver`: 인터넷 SMTP 요청을 받아 Postfix가 Maildir에 배달한다.
 - `imap-mailbox`: 같은 Maildir volume을 Dovecot IMAP으로 제공한다.
 - `webmail-ui`: Maildir을 읽어 자체 메일 저장소로 가져오고 SMTP 수신기에 발송을 요청한다.
+- 운영 `mailbox-webmail-proxy`: `webmail-ui/Caddyfile`을 읽는 Caddy 컨테이너로 Webmail HTTPS 연결을 처리한다.
 
 각 모듈은 자신의 Dockerfile과 설정을 소유한다. 루트 Docker Compose만 모듈 사이의 네트워크, volume, 포트와 환경변수를 조립한다.
 
@@ -14,7 +15,8 @@
 | --- | --- | --- | --- |
 | `smtp-receiver` | `25` | SMTP, 수신 주소 map | Maildir, Postfix queue/log |
 | `imap-mailbox` | `143` | Maildir | IMAP mailbox |
-| `webmail-ui` | `18080 -> 3000` | HTTP, Maildir read, SMTP transport | HTML, Webmail data, SMTP submission |
+| `webmail-ui` | 내부 `3000`, 개발 loopback `18080` | HTTP, Maildir read, SMTP transport | HTML, Webmail data, SMTP submission |
+| 운영 HTTPS 프록시 | `18443 -> 8443`, `18080 -> 8080` | HTTPS, HTTP 이동 | 내부 Webmail HTTP |
 
 ## 런타임 흐름
 
@@ -38,6 +40,7 @@ Webmail은 `mailbox-store`를 read-only로 읽어 원본 Maildir을 자체 저�
 
 ```text
 browser
+  -> production HTTPS proxy (개발은 loopback HTTP)
   -> server.mjs auth/send/download handlers
   -> Next.js App Router pages
      -> auth-core signed session
@@ -60,8 +63,11 @@ webmail signup
 ## Configuration Boundary
 
 - 공통 host/domain/port/image/volume 값은 `.env`에서 Compose로 전달한다.
+- SMTP·IMAP·프록시는 `MAIL_TLS_DIR`의 서버 인증서와 개인키를 read-only로 읽는다. CA 개인키는 공유하지 않는다. SMTP는 STARTTLS를 제공하고, IMAP 로그인에는 TLS 1.2 이상의 연결이 필요하다.
+- 운영 Webmail은 HTTPS 프록시를 통해 공개하며 HTTP는 `MAIL_WEB_HOSTNAME`과 `MAIL_WEB_HTTPS_PORT`의 주소로 이동한다. 개발 HTTP는 loopback에만 노출한다.
+- `MAIL_NETWORK_SUBNET`은 Compose 네트워크 대역을, `MYNETWORKS`는 Postfix가 중계를 허용할 대역을 정의한다. 두 값의 메일 컨테이너 대역을 일치시킨다.
 - `WEBMAIL_SESSION_SECRET`과 `WEBMAIL_SIGNUP_TOKEN`은 운영에서 placeholder를 허용하지 않는다.
-- HTTPS reverse proxy 뒤에서는 `WEBMAIL_COOKIE_SECURE=true`를 사용한다.
+- 운영 Compose의 `WEBMAIL_COOKIE_SECURE`는 `true`로 고정한다. 개발 HTTP 실행은 `false`를 사용한다.
 - SMTP 수신 가능 ID는 회원가입으로 `mailbox-account-store/virtual-mailbox-accounts`에 등록한다.
 
 ## 저장소 원칙

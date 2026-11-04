@@ -17,7 +17,7 @@ services:
     environment:
       MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.ds-mail.p-e.kr}
       MAIL_DOMAINS: ${MAIL_DOMAINS:-ds-mail.p-e.kr post.ds-mail.p-e.kr}
-      MYNETWORKS: ${MYNETWORKS:-127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16}
+      MYNETWORKS: ${MYNETWORKS:-127.0.0.0/8 172.25.0.0/16}
     ports:
       - "${SMTP_PORT:-25}:25"
     volumes:
@@ -25,6 +25,12 @@ services:
       - smtp-queue-store:/var/spool/postfix
       - mailbox-account-store:/accounts
       - ${MAIL_LOG_DIR:-./logs}/smtp:/var/log
+      - type: bind
+        source: ${MAIL_TLS_DIR:-./tls}
+        target: /etc/mailbox/tls
+        read_only: true
+        bind:
+          create_host_path: false
 
   mailbox-imap-mailbox:
     image: mailbox-imap-mailbox:prod
@@ -40,6 +46,12 @@ services:
     volumes:
       - mailbox-store:/var/mail/vhosts
       - mailbox-account-store:/accounts
+      - type: bind
+        source: ${MAIL_TLS_DIR:-./tls}
+        target: /etc/mailbox/tls
+        read_only: true
+        bind:
+          create_host_path: false
 
   mailbox-webmail-ui:
     image: mailbox-webmail-ui:prod
@@ -63,13 +75,49 @@ services:
       MAIL_DEFAULT_DOMAIN: ${MAIL_DEFAULT_DOMAIN:-ds-mail.p-e.kr}
       WEBMAIL_SESSION_SECRET: ${WEBMAIL_SESSION_SECRET:?WEBMAIL_SESSION_SECRET is required}
       WEBMAIL_SIGNUP_TOKEN: ${WEBMAIL_SIGNUP_TOKEN:?WEBMAIL_SIGNUP_TOKEN is required}
-      WEBMAIL_COOKIE_SECURE: ${WEBMAIL_COOKIE_SECURE:-false}
-    ports:
-      - "${MAIL_WEB_PORT:-18080}:3000"
+      WEBMAIL_COOKIE_SECURE: "true"
     volumes:
       - webmail-data-store:/app/data
       - mailbox-store:/mailboxes:ro
       - mailbox-account-store:/accounts
+
+  mailbox-webmail-proxy:
+    image: caddy:2.11.7-alpine@sha256:e70b164da81ef698b3ad19af799ea6086ce6d9e48ed4079eb9fe26f6fbf14ee5
+    container_name: mailbox-webmail-proxy
+    restart: unless-stopped
+    logging: *common-logging
+    depends_on:
+      - mailbox-webmail-ui
+    environment:
+      MAIL_WEB_HOSTNAME: ${MAIL_WEB_HOSTNAME:-mail.ds-mail.p-e.kr}
+      MAIL_WEB_HTTPS_PORT: ${MAIL_WEB_HTTPS_PORT:-18443}
+    ports:
+      - "${MAIL_WEB_PORT:-18080}:8080"
+      - "${MAIL_WEB_HTTPS_PORT:-18443}:8443"
+    volumes:
+      - type: bind
+        source: ./webmail-ui/Caddyfile
+        target: /etc/caddy/Caddyfile
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MAIL_TLS_DIR:-./tls}
+        target: /etc/mailbox/tls
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /data
+      - /config
+      - /tmp
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${MAIL_NETWORK_SUBNET:-172.25.0.0/16}
 
 volumes:
   mailbox-store:

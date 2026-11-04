@@ -13,6 +13,20 @@ append_dot_mydomain = no
 readme_directory = no
 maillog_file = /var/log/postfix.log
 
+smtpd_tls_security_level = may
+smtpd_tls_cert_file = /etc/mailbox/tls/fullchain.pem
+smtpd_tls_key_file = /etc/mailbox/tls/privkey.pem
+smtpd_tls_protocols = >=TLSv1.2
+smtpd_tls_mandatory_protocols = >=TLSv1.2
+smtpd_tls_loglevel = 1
+smtpd_tls_received_header = yes
+smtpd_tls_auth_only = yes
+smtp_tls_security_level = may
+smtp_tls_protocols = >=TLSv1.2
+smtp_tls_mandatory_protocols = >=TLSv1.2
+smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
+smtp_tls_loglevel = 1
+
 virtual_mailbox_domains = ds-mail.p-e.kr post.ds-mail.p-e.kr
 virtual_mailbox_base = /var/mail/vhosts
 virtual_mailbox_maps = hash:/etc/postfix/maps/virtual-mailbox-accounts

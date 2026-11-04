@@ -1,4 +1,5 @@
 import Link from "next/link";
+import TemporalEmblem from "../TemporalEmblem";
 
 type SignupPageProps = {
   searchParams: Promise<{
@@ -26,9 +27,10 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
 
   return (
     <div className="authWrap">
+      <TemporalEmblem />
       <div className="pageHeader">
-        <p className="eyebrow">Your own sky</p>
-        <h1>새 편지함을 만들어요</h1>
+        <p className="eyebrow">Your next chapter</p>
+        <h1>당신의 내일을 연결해요</h1>
         <p className="pageIntro">한 번의 가입으로 웹메일 주소와 IMAP 계정이 함께 준비됩니다.</p>
       </div>
       <section className="panel authPanel">
@@ -50,7 +52,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
           {message ? <p className="status error" role="alert">{message}</p> : null}
           <div className="actions">
             <button className="button" type="submit">
-              내 하늘 만들기
+              내 편지함 만들기
             </button>
           </div>
         </form>

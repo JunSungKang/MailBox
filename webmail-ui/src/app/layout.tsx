@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     default: "MailBox",
     template: "%s · MailBox"
   },
-  description: "하늘처럼 가볍게 주고받는 MailBox 웹메일"
+  description: "내일이 먼저 말을 걸어오는 곳, MailBox 내일의 우편함"
 };
 
 export default async function RootLayout({
@@ -23,18 +23,27 @@ export default async function RootLayout({
     <html lang="ko">
       <body>
         <a className="skipLink" href="#main-content">본문으로 바로가기</a>
-        <div className="sky" aria-hidden="true">
-          <span className="cloud cloudOne" />
-          <span className="cloud cloudTwo" />
-          <span className="cloud cloudThree" />
+        <div className="timeField" aria-hidden="true">
+          <span className="lightVeil lightVeilMint" />
+          <span className="lightVeil lightVeilViolet" />
+          <span className="timeOrbit timeOrbitOne" />
+          <span className="timeOrbit timeOrbitTwo" />
+          <span className="timeSpark timeSparkOne" />
+          <span className="timeSpark timeSparkTwo" />
         </div>
         <div className="appShell">
           <header className="topBar">
             <Link className="brand" href={userId ? "/inbox" : "/login"} aria-label="MailBox 홈">
-              <span className="brandMark" aria-hidden="true">✦</span>
-              <span>MailBox</span>
+              <span className="brandMark" aria-hidden="true">
+                <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <ellipse cx="16" cy="16" rx="14" ry="7" transform="rotate(-35 16 16)" />
+                  <rect x="9" y="11" width="14" height="10" rx="2" />
+                  <path d="m10 12 6 5 6-5" />
+                </svg>
+              </span>
+              <span className="brandText"><strong>MailBox</strong><small>내일의 우편함</small></span>
             </Link>
-            {userId ? <AppNavigation /> : <p className="guestGreeting">당신의 조용한 하늘 편지함</p>}
+            {userId ? <AppNavigation /> : <p className="guestGreeting">내일이 먼저 말을 걸어오는 곳.</p>}
             <div className="accountArea">
               {userId ? (
                 <>
@@ -60,7 +69,7 @@ export default async function RootLayout({
             </div>
           </header>
           <main className="main" id="main-content">{children}</main>
-          <footer className="footer">MailBox · 마음을 가볍게 전하는 공간</footer>
+          <footer className="footer"><span className="footerOrbit" aria-hidden="true">◎</span> MailBox · 내일의 우편함</footer>
         </div>
       </body>
     </html>

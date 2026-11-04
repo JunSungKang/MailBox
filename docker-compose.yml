@@ -10,13 +10,19 @@ services:
     environment:
       MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.ds-mail.p-e.kr}
       MAIL_DOMAINS: ${MAIL_DOMAINS:-ds-mail.p-e.kr post.ds-mail.p-e.kr crmnova-fin.kro.kr post.crmnova-fin.kro.kr}
-      MYNETWORKS: ${MYNETWORKS:-127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16}
+      MYNETWORKS: ${MYNETWORKS:-127.0.0.0/8 172.25.0.0/16}
     ports:
       - "${SMTP_PORT:-25}:25"
     volumes:
       - mailbox-store:/var/mail/vhosts
       - smtp-queue-store:/var/spool/postfix
       - mailbox-account-store:/accounts
+      - type: bind
+        source: ${MAIL_TLS_DIR:-./tls}
+        target: /etc/mailbox/tls
+        read_only: true
+        bind:
+          create_host_path: false
 
   mailbox-imap-mailbox:
     image: mailbox-imap-mailbox:dev
@@ -31,6 +37,12 @@ services:
     volumes:
       - mailbox-store:/var/mail/vhosts
       - mailbox-account-store:/accounts
+      - type: bind
+        source: ${MAIL_TLS_DIR:-./tls}
+        target: /etc/mailbox/tls
+        read_only: true
+        bind:
+          create_host_path: false
 
   mailbox-webmail-ui:
     image: mailbox-webmail-ui:dev
@@ -55,11 +67,17 @@ services:
       WEBMAIL_SIGNUP_TOKEN: ${WEBMAIL_SIGNUP_TOKEN:-local-signup-token}
       WEBMAIL_COOKIE_SECURE: ${WEBMAIL_COOKIE_SECURE:-false}
     ports:
-      - "${MAIL_WEB_PORT:-18080}:3000"
+      - "127.0.0.1:${MAIL_WEB_PORT:-18080}:3000"
     volumes:
       - webmail-data-store:/app/data
       - mailbox-store:/mailboxes:ro
       - mailbox-account-store:/accounts
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${MAIL_NETWORK_SUBNET:-172.25.0.0/16}
 
 volumes:
   mailbox-store:

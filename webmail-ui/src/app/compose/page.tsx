@@ -14,9 +14,9 @@ export default async function ComposePage({ searchParams }: ComposePageProps) {
     <>
       <div className="pageHeader">
         <div>
-          <p className="eyebrow">New letter</p>
-          <h1>새 편지를 띄워요</h1>
-          <p className="pageIntro">말을 고르고, 마음을 담아, 가볍게 보내세요.</p>
+          <p className="eyebrow">A new transmission</p>
+          <h1>다음 이야기를 보내요</h1>
+          <p className="pageIntro">지금의 한마디가 누군가의 새로운 하루에 닿도록.</p>
         </div>
       </div>
       <section className="panel">

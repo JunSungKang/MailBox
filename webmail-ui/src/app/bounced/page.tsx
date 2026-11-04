@@ -26,7 +26,7 @@ export default async function BouncedPage() {
     <>
       <div className="pageHeader">
         <div>
-          <p className="eyebrow">Returned</p>
+          <p className="eyebrow">Return signals</p>
           <h1>돌아온 편지</h1>
           <p className="pageIntro">전달되지 못하고 돌아온 편지와 이유를 확인하세요.</p>
         </div>
@@ -34,7 +34,7 @@ export default async function BouncedPage() {
       </div>
       <section className="panel">
         {messages.length === 0 ? (
-          <div className="empty"><span className="emptyIcon" aria-hidden="true">◌</span><strong>돌아온 편지가 없어요</strong><span>모든 편지가 무사히 길을 찾고 있어요.</span></div>
+          <div className="empty"><span className="emptyIcon" aria-hidden="true">◎</span><strong>돌아온 편지가 없어요</strong><span>전달을 확인할 편지가 생기면 이곳에 모아둘게요.</span></div>
         ) : (
           <div className="mailList">
             <div className="mailListHead" aria-hidden="true"><span>보낸 사람</span><span>제목</span><span className="date">돌아온 때</span></div>
