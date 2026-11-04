@@ -8,7 +8,7 @@
 
 ## Stack
 
-- SMTP: Postfix on Debian
+- SMTP: Postfix 3.11 on Alpine stable (Node.js는 비권한 계정 맵 감시기만 실행)
 - IMAP: Dovecot on Debian
 - Webmail: Node.js 24, Next.js 16, React 19, TypeScript 6
 - Mail parsing/sending: `mailparser`, `nodemailer`, `busboy`

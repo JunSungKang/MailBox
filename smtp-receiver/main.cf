@@ -1,11 +1,11 @@
-compatibility_level = 3.6
+compatibility_level = 3.11
 
 myhostname = mail.ds-mail.p-e.kr
 myorigin = $mydomain
 mydestination = localhost
 inet_interfaces = all
 inet_protocols = ipv4
-mynetworks = 127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+mynetworks = 127.0.0.0/8
 
 smtpd_banner = $myhostname ESMTP
 biff = no
@@ -21,7 +21,8 @@ smtpd_tls_mandatory_protocols = >=TLSv1.2
 smtpd_tls_loglevel = 1
 smtpd_tls_received_header = yes
 smtpd_tls_auth_only = yes
-smtp_tls_security_level = may
+smtp_tls_security_level = verify
+smtp_tls_verify_cert_match = hostname
 smtp_tls_protocols = >=TLSv1.2
 smtp_tls_mandatory_protocols = >=TLSv1.2
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
@@ -29,14 +30,18 @@ smtp_tls_loglevel = 1
 
 virtual_mailbox_domains = ds-mail.p-e.kr post.ds-mail.p-e.kr
 virtual_mailbox_base = /var/mail/vhosts
-virtual_mailbox_maps = hash:/etc/postfix/maps/virtual-mailbox-accounts
+virtual_mailbox_maps = lmdb:/var/lib/mailbox-maps/virtual-mailbox-accounts
 virtual_minimum_uid = 5000
 virtual_uid_maps = static:5000
 virtual_gid_maps = static:5000
 virtual_transport = virtual
 
-smtpd_relay_restrictions = permit_mynetworks reject_unauth_destination
-smtpd_recipient_restrictions = permit_mynetworks reject_unauth_destination
+smtpd_relay_restrictions = reject_unauth_destination
+smtpd_recipient_restrictions = reject_unauth_destination
+smtpd_sasl_auth_enable = no
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = /run/smtp-auth/auth
+disable_vrfy_command = yes
 
 local_recipient_maps =
 relayhost =

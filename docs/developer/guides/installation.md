@@ -31,7 +31,17 @@ openssl x509 -in tls/fullchain.pem -noout -subject -issuer -dates
 
 위 명령의 `tls/`는 `MAIL_TLS_DIR` 값을 지정한 경우 해당 경로로 바꾼다. 인증서·개인키·`.env`·계정 파일은 Git에 넣지 않는다. 공인 CA 발급과 갱신은 운영자가 준비하며, 이 Compose는 자동 발급을 수행하지 않는다.
 
-기본 컨테이너 네트워크는 `172.25.0.0/16`이다. 기존 네트워크와 충돌하면 `MAIL_NETWORK_SUBNET`과 `MYNETWORKS`의 컨테이너 대역을 함께 변경한다. `MYNETWORKS`는 loopback과 메일 컨테이너 대역만 허용한다. Docker Desktop이 외부 접속을 사설 IP로 전달할 수 있으므로 `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` 전체를 신뢰하지 않는다.
+기본 컨테이너 네트워크는 `172.25.0.0/16`이다. 충돌하면 `MAIL_NETWORK_SUBNET`만 변경한다. 네트워크 대역은 SMTP 중계 권한과 무관하며 기존 `MYNETWORKS` 환경변수는 더 이상 사용하지 않는다.
+
+`SMTP_AUTH_USER`는 전용 서비스 사용자(기본 `mailbox-submit`), `SMTP_AUTH_PASSWORD`는 32자 이상의 무작위 비밀번호로 설정한다. 일반 사용자의 비밀번호를 재사용하지 않는다. `MAIL_SMTP_CA_FILE`에 SMTP 인증서를 발급한 공개 CA bundle 경로를 지정한다(공인 CA이면 배포 환경의 공개 CA bundle도 가능). 서버 인증서의 SAN에 `MAIL_HOSTNAME`이 있어야 한다. CA 개인키를 지정하지 않는다.
+
+기동 후 전용 계정을 기존 가입 API로 등록하고 SMTP 인증을 검증한다. 명령은 기존 계정을 덮어쓰지 않으며 실패 시 운영 비밀값과 계정 설정을 확인한다.
+
+```bash
+docker compose -f docker-compose.prod.yml exec --user 5000:5000 mailbox-webmail-ui node smtp-bootstrap.mjs
+```
+
+내부 제출 포트 `2587`을 호스트에 공개하지 않는다. 공개 SMTP `25`는 컨테이너 `2525`로 연결된다. `smtp-auth-store`는 Dovecot과 Postfix가 공유하는 인증 소켓이며 계정·메일 저장 volume과 별개다.
 
 ## 실행
 

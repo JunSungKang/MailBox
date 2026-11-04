@@ -48,3 +48,7 @@ docker compose -f docker-compose.prod.yml logs mailbox-webmail-proxy
 - DNS `A` 레코드가 실제 서버 IP를 가리키고, `MAIL_WEB_HOSTNAME`이 접속할 주소와 일치하는지 확인한다. DNS의 A 레코드는 웹 접속 포트 번호를 지정하지 않는다.
 - `https://<호스트>:18443/login`에서 응답을 확인한다. 로컬 CA는 `curl --cacert <공개-CA-인증서>`로 검증한다.
 - 개발 Compose의 HTTP 포트는 loopback 전용이다. 외부 접속에는 운영 Compose를 사용한다.
+
+## SMTP 보안 제출 실패
+
+`SMTP_URL`, `ignoreTLS`, sendmail fallback은 지원하지 않는다. `SMTP_AUTH_USER`/`SMTP_AUTH_PASSWORD`가 전용 계정과 일치하는지, `MAIL_SMTP_CA_FILE`과 `MAIL_HOSTNAME`이 인증서 체인/SAN에 맞는지 확인한다. `node smtp-bootstrap.mjs`는 기존 계정을 덮어쓰지 않고 실제 STARTTLS/SASL 인증을 검사한다. 앱은 원시 SMTP 응답·비밀번호를 오류 로그에 저장하지 않는다. 외부 목적지가 TLS/호스트 검증을 통과하지 못하면 Postfix 큐에 보류되며 평문 재시도는 없다.

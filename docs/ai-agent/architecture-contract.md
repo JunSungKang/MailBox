@@ -46,7 +46,11 @@ SMTP나 IMAP 모듈이 Webmail 내부 파일을 import하거나, Webmail이 Post
 - SMTP `25`는 TLS 1.2 이상의 STARTTLS를 제공하고, IMAP `143`은 STARTTLS 후 로그인을 요구한다.
 - `MAIL_TLS_DIR`의 서버 인증서·키만 각 서비스에 read-only로 mount한다. CA 개인키는 해당 디렉터리 밖에 보관하며 인증서·키·`.env`는 추적하지 않는다.
 - 운영 HTTPS 프록시만 Webmail을 외부에 노출하며 로그인 cookie는 `Secure`를 사용한다. 개발 HTTP는 loopback 전용이다.
-- SMTP의 `MYNETWORKS`는 loopback과 실제 `MAIL_NETWORK_SUBNET`만 신뢰한다. 외부 Docker NAT 주소를 포함하는 광범위한 사설 대역을 허용하지 않는다.
+- 공개 SMTP는 사설망·loopback을 포함한 네트워크 위치로 외부 중계를 허용하지 않는다. `mynetworks`는 loopback으로 고정한다.
+- 앱은 내부 `2587`에 전용 SASL 계정과 필수 STARTTLS로 제출하며 CA·호스트명 검증을 생략하지 않는다. 실패 시 sendmail/평문 fallback은 금지한다.
+- MTA 외부 배달은 `smtp_tls_security_level=verify`로 TLS와 MX 호스트 인증서 검증을 요구한다. 지원하지 않는 목적지는 큐에 보류한다.
+- Dovecot SASL 소켓은 `smtp-auth-store`에서 root와 SMTP 전용 GID 1500만 접근한다. 계정 맵 감시기는 UID 5010, capability 0으로 실행한다.
+- Postfix master/virtual의 필요한 root 권한과 일반 작업자의 권한을 구분한다. 잔여 root 권한을 위험 수용 승인으로 간주하지 않는다.
 - `mailbox_user`는 HMAC 검증을 통과한 cookie만 신뢰한다.
 - 가입은 운영 가입 코드를 요구하며 Dovecot 사용자와 허용 domain의 Postfix 수신 주소를 함께 생성한다.
 - inbox, sent, bounced, detail, attachment, send는 현재 사용자 소유권을 검사한다.

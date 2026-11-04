@@ -16,4 +16,5 @@ fi
 chown vmail:vmail "$ACCOUNT_FILE"
 chmod 0640 "$ACCOUNT_FILE"
 
+install -d -m 0750 -o root -g smtp-auth /run/smtp-auth
 exec dovecot -F
