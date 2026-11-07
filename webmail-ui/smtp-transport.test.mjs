@@ -7,6 +7,44 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createSubmissionTransport, submissionOptions, safeSmtpError } from "./smtp-transport.mjs";
+import { ensureSubmissionAccount } from "./smtp-bootstrap.mjs";
+
+test("bootstrap verifies existing long credentials without reapplying signup policy", async () => {
+  const env = { SMTP_AUTH_USER: "existing-service", SMTP_AUTH_PASSWORD: "x".repeat(80) };
+  let verified = 0;
+  await ensureSubmissionAccount({ env, verify: async () => { verified += 1; },
+    fetchImpl: async () => { throw new Error("Existing credentials must not trigger signup"); } });
+  assert.equal(verified, 1);
+});
+
+test("bootstrap provisions only after an authentication failure and verifies again", async () => {
+  let verified = 0;
+  let signups = 0;
+  await ensureSubmissionAccount({ env: { SMTP_AUTH_USER: "new-service", SMTP_AUTH_PASSWORD: "x".repeat(48), WEBMAIL_SIGNUP_TOKEN: "fixture-invite" },
+    verify: async () => { if (++verified === 1) throw Object.assign(new Error("fixture auth failure"), { code: "EAUTH" }); },
+    fetchImpl: async (_url, options) => {
+      signups += 1;
+      assert.equal(options.redirect, "manual");
+      assert.equal(options.body.get("userId"), "new-service");
+      return new Response(null, { status: 303, headers: { location: "/inbox" } });
+    } });
+  assert.equal(signups, 1);
+  assert.equal(verified, 2);
+});
+
+test("bootstrap never signs up after TLS or network failure", async () => {
+  for (const code of ["ETLS", "ESOCKET", "ECONNECTION"]) {
+    await assert.rejects(ensureSubmissionAccount({ verify: async () => { throw Object.assign(new Error("fixture connection failure"), { code }); },
+      fetchImpl: async () => assert.fail("TLS/network failure must not provision accounts") }), { code });
+  }
+});
+
+test("bootstrap rejects wrong existing credentials even if signup says account exists", async () => {
+  let verified = 0;
+  await assert.rejects(ensureSubmissionAccount({ verify: async () => { verified += 1; throw Object.assign(new Error("fixture auth failure"), { code: "EAUTH" }); },
+    fetchImpl: async () => new Response(null, { status: 303, headers: { location: "/signup?error=exists" } }) }), { code: "EAUTH" });
+  assert.equal(verified, 2);
+});
 
 test("submission requires authenticated, verified TLS without plaintext fallback", async (t) => {
   // Temporary keys stay under the checkout, including on developer machines.
@@ -77,6 +115,8 @@ test("submission requires authenticated, verified TLS without plaintext fallback
             await operation;
             assert(commands.some((entry) => entry.command === "AUTH" && entry.encrypted));
             assert(commands.some((entry) => entry.command === "DATA" && entry.encrypted));
+            await ensureSubmissionAccount({ env: { ...env, SMTP_AUTH_PASSWORD: "x".repeat(80) },
+              fetchImpl: async () => assert.fail("Verified existing service must not trigger signup") });
           } else {
             await assert.rejects(operation);
             assert(!commands.some((entry) => ["AUTH", "MAIL", "RCPT", "DATA"].includes(entry.command)));

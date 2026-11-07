@@ -32,6 +32,7 @@ COPY --from=builder /app/smtp-transport.mjs ./smtp-transport.mjs
 COPY --from=builder /app/smtp-bootstrap.mjs ./smtp-bootstrap.mjs
 COPY --from=builder /app/auth-core.mjs ./auth-core.mjs
 COPY --from=builder /app/account-core.mjs ./account-core.mjs
+COPY --from=builder /app/account-store.mjs ./account-store.mjs
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=production-deps /app/node_modules ./node_modules

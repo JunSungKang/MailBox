@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import bcrypt from "bcryptjs";
 
-import { mergeDovecotUser, mergePostfixAccounts, parseDomains, parseDovecotUsers } from "./account-core.mjs";
+import { dovecotUserLine, mergeDovecotUser, mergePostfixAccounts, parseDomains, parseDovecotUsers } from "./account-core.mjs";
 
 const hash = "{BLF-CRYPT}$2b$12$123456789012345678901u12345678901234567890123456789012";
 
@@ -20,6 +20,14 @@ test("adds per-domain Postfix mappings to an isolated Maildir", () => {
   const output = mergePostfixAccounts("mailbox@example.com mailbox/Maildir/\n", "newuser", ["example.com", "post.example.com"]);
   assert.match(output, /newuser@example\.com newuser\/Maildir\//);
   assert.match(output, /newuser@post\.example\.com newuser\/Maildir\//);
+});
+
+test("never creates an account or recipient outside the Maildir user directory", () => {
+  for (const id of [".", "..", "../other", "other/user"]) {
+    assert.throws(() => dovecotUserLine(id, hash), /Invalid user id/);
+    assert.throws(() => mergeDovecotUser("", id, hash), /Invalid user id/);
+    assert.throws(() => mergePostfixAccounts("", id, ["example.com"]), /Invalid user id/);
+  }
 });
 
 test("creates a Dovecot-compatible bcrypt credential without storing plaintext", async () => {
