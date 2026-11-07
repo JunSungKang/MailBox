@@ -34,3 +34,11 @@ test("bounds new passwords by UTF-8 bytes at bcrypt's 72-byte limit", () => {
     assert.equal(isValidPassword(password), false);
   }
 });
+
+test("rejects NUL credentials that cannot authenticate through SASL PLAIN", () => {
+  for (const password of ["\0synthetic-password", "synthetic\0password", "synthetic-password\0"]) {
+    assert.equal(isValidPassword(password), false);
+    const form = new URLSearchParams(new URLSearchParams({ password }).toString());
+    assert.equal(isValidPassword(form.get("password")), false);
+  }
+});
