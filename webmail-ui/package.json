@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "NODE_ENV=development node server.mjs",
     "build": "next build",
-    "test": "node --test auth-core.test.mjs account-core.test.mjs smtp-transport.test.mjs",
+    "test": "node --test auth-core.test.mjs account-core.test.mjs account-store.test.mjs smtp-transport.test.mjs",
     "smtp:provision": "node smtp-bootstrap.mjs",
     "start": "NODE_ENV=production node server.mjs"
   },

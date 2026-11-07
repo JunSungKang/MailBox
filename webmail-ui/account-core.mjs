@@ -1,4 +1,4 @@
-const userPattern = /^[a-z0-9._-]{1,64}$/;
+import { isValidUserId } from "./auth-core.mjs";
 const domainPattern = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export function parseDomains(value) {
@@ -14,11 +14,11 @@ export function parseDovecotUsers(raw) {
       const fields = line.split(":");
       return { id: fields[0] || "", passwordHash: fields[1] || "", line };
     })
-    .filter((account) => userPattern.test(account.id) && account.passwordHash);
+    .filter((account) => isValidUserId(account.id) && account.passwordHash);
 }
 
 export function dovecotUserLine(userId, passwordHash) {
-  if (!userPattern.test(userId)) throw new Error("Invalid user id");
+  if (!isValidUserId(userId)) throw new Error("Invalid user id");
   if (!/^\{BLF-CRYPT\}\$2[aby]\$/.test(passwordHash)) throw new Error("Invalid password hash");
   return `${userId}:${passwordHash}:5000:5000::/var/mail/vhosts/${userId}::`;
 }
@@ -32,7 +32,7 @@ export function mergeDovecotUser(raw, userId, passwordHash) {
 }
 
 export function mergePostfixAccounts(raw, userId, domains) {
-  if (!userPattern.test(userId)) throw new Error("Invalid user id");
+  if (!isValidUserId(userId)) throw new Error("Invalid user id");
   if (!Array.isArray(domains) || domains.length === 0) throw new Error("At least one mail domain is required");
   const entries = new Map();
   for (const line of String(raw || "").split(/\r?\n/)) {

@@ -7,8 +7,9 @@ import next from "next";
 import Busboy from "busboy";
 import bcrypt from "bcryptjs";
 import { createSubmissionTransport, safeSmtpError } from "./smtp-transport.mjs";
-import { isValidUserId, normalizeUserId, sessionToken, verifySessionToken } from "./auth-core.mjs";
-import { mergeDovecotUser, mergePostfixAccounts, parseDomains, parseDovecotUsers } from "./account-core.mjs";
+import { isValidPassword, isValidUserId, normalizeUserId, sessionToken, verifySessionToken } from "./auth-core.mjs";
+import { parseDomains, parseDovecotUsers } from "./account-core.mjs";
+import { createAccountStore } from "./account-store.mjs";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.BIND_HOST || "0.0.0.0";
@@ -22,7 +23,6 @@ const TMP_ROOT = path.join(DATA_DIR, "tmp");
 const ACCOUNT_DIR = process.env.MAIL_ACCOUNT_DIR || path.join(DATA_DIR, "accounts");
 const DOVECOT_USERS_PATH = path.join(ACCOUNT_DIR, "dovecot-users");
 const POSTFIX_ACCOUNTS_PATH = path.join(ACCOUNT_DIR, "virtual-mailbox-accounts");
-const ACCOUNT_LOCK_PATH = path.join(ACCOUNT_DIR, ".signup.lock");
 const MAX_ATTACHMENT_BYTES = 1024 * 1024 * 1024;
 const DEFAULT_MAIL_DOMAIN = process.env.MAIL_DEFAULT_DOMAIN || "ds-mail.p-e.kr";
 const MAIL_DOMAINS = parseDomains(process.env.MAIL_DOMAINS || DEFAULT_MAIL_DOMAIN);
@@ -30,7 +30,6 @@ const AUTH_COOKIE = "mailbox_user";
 const SESSION_SECRET = process.env.WEBMAIL_SESSION_SECRET || (dev ? "local-development-only" : "");
 const SIGNUP_TOKEN = process.env.WEBMAIL_SIGNUP_TOKEN || (dev ? "local-signup-token" : "");
 const COOKIE_SECURE = process.env.WEBMAIL_COOKIE_SECURE === "true";
-const PASSWORD_MIN_LENGTH = 12;
 const MAX_AUTH_BODY_BYTES = 16 * 1024;
 
 if (!dev && (SESSION_SECRET.length < 32 || SESSION_SECRET.startsWith("replace-with-"))) {
@@ -41,6 +40,9 @@ if (!dev && (SIGNUP_TOKEN.length < 16 || SIGNUP_TOKEN.startsWith("replace-with-"
 }
 
 const submissionTransport = createSubmissionTransport();
+const accountStore = createAccountStore({ directory: ACCOUNT_DIR,
+  legacyUsersPath: path.join(DATA_DIR, "users.json"), domains: MAIL_DOMAINS,
+  onRecovery: (event) => auditLog("INFO", event, { actor: "system", status: "success" }) });
 
 const boxLabels = new Set(["inbox", "sent", "bounced"]);
 
@@ -144,10 +146,6 @@ function normalizeSender(value) {
   return process.env.MAIL_FROM || "";
 }
 
-function isValidPassword(value) {
-  return typeof value === "string" && value.length >= PASSWORD_MIN_LENGTH && value.length <= 128;
-}
-
 function requestUserId(req) {
   const cookies = String(req.headers.cookie || "").split(";");
   for (const cookie of cookies) {
@@ -194,73 +192,12 @@ async function ensureAccountFiles() {
   await Promise.all([fsp.access(DOVECOT_USERS_PATH), fsp.access(POSTFIX_ACCOUNTS_PATH)]);
 }
 
-async function readAccountFiles() {
-  const [dovecotUsers, postfixAccounts] = await Promise.all([
-    fsp.readFile(DOVECOT_USERS_PATH, "utf8"),
-    fsp.readFile(POSTFIX_ACCOUNTS_PATH, "utf8")
-  ]);
-  return { dovecotUsers, postfixAccounts };
-}
-
 async function passwordMatchesAccount(userId, password) {
   const raw = await fsp.readFile(DOVECOT_USERS_PATH, "utf8").catch(() => "");
   const account = parseDovecotUsers(raw).find((item) => item.id === userId);
   if (!account) return false;
   if (!account.passwordHash.startsWith("{BLF-CRYPT}")) return false;
   return bcrypt.compare(password, account.passwordHash.slice("{BLF-CRYPT}".length));
-}
-
-async function atomicWrite(filePath, content) {
-  const tempPath = `${filePath}.${generatedId()}.tmp`;
-  await fsp.writeFile(tempPath, content, { encoding: "utf8", mode: 0o640, flag: "wx" });
-  await fsp.rename(tempPath, filePath);
-}
-
-async function withAccountLock(callback) {
-  await fsp.mkdir(ACCOUNT_DIR, { recursive: true });
-  let handle;
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    try {
-      handle = await fsp.open(ACCOUNT_LOCK_PATH, "wx", 0o600);
-      break;
-    } catch (error) {
-      if (error?.code !== "EEXIST") throw error;
-      const stat = await fsp.stat(ACCOUNT_LOCK_PATH).catch(() => null);
-      if (stat && Date.now() - stat.mtimeMs > 30_000) {
-        await fsp.unlink(ACCOUNT_LOCK_PATH).catch(() => {});
-      }
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-  }
-  if (!handle) throw new Error("Account store is busy");
-  try {
-    return await callback();
-  } finally {
-    await handle.close().catch(() => {});
-    await fsp.unlink(ACCOUNT_LOCK_PATH).catch(() => {});
-  }
-}
-
-async function provisionAccount(userId, password) {
-  return withAccountLock(async () => {
-    const { dovecotUsers, postfixAccounts } = await readAccountFiles();
-    if (parseDovecotUsers(dovecotUsers).some((account) => account.id === userId)) {
-      const error = new Error("Account already exists");
-      error.code = "ACCOUNT_EXISTS";
-      throw error;
-    }
-    const passwordHash = `{BLF-CRYPT}${await bcrypt.hash(password, 12)}`;
-    const nextDovecotUsers = mergeDovecotUser(dovecotUsers, userId, passwordHash);
-    const nextPostfixAccounts = mergePostfixAccounts(postfixAccounts, userId, MAIL_DOMAINS);
-    await atomicWrite(DOVECOT_USERS_PATH, nextDovecotUsers);
-    try {
-      await atomicWrite(POSTFIX_ACCOUNTS_PATH, nextPostfixAccounts);
-    } catch (error) {
-      await atomicWrite(DOVECOT_USERS_PATH, dovecotUsers);
-      throw error;
-    }
-    return { addressCount: MAIL_DOMAINS.length, domains: MAIL_DOMAINS };
-  });
 }
 
 async function parseUrlEncodedForm(req) {
@@ -339,6 +276,7 @@ async function handleAuth(req, res, pathname) {
   const password = form.get("password")?.toString() || "";
   const signupToken = form.get("signupToken")?.toString() || "";
   if (!isValidUserId(userId)) {
+    auditWarn("auth.request.rejected", { ...context, reason: "invalid_user_id", status: 303, durationMs: Date.now() - startedAt });
     redirect(res, pathname === "/api/auth/login" ? "/login?error=invalid" : "/signup?error=invalid");
     return true;
   }
@@ -378,11 +316,12 @@ async function handleAuth(req, res, pathname) {
       return true;
     }
     if (!isValidPassword(password)) {
+      auditWarn("auth.signup.invalid_password", { ...context, userId, status: 303, durationMs: Date.now() - startedAt });
       redirect(res, "/signup?error=weak_password");
       return true;
     }
     try {
-      provisionedAccount = await provisionAccount(userId, password);
+      provisionedAccount = await accountStore.provision(userId, password);
     } catch (error) {
       if (error?.code === "ACCOUNT_EXISTS") {
         auditWarn("auth.signup.exists", {
@@ -768,6 +707,7 @@ function messageOwnedByUser(meta, userId) {
 }
 
 await Promise.all([ensureDirs(), ensureAccountFiles()]);
+await accountStore.recover();
 await app.prepare();
 
 http
