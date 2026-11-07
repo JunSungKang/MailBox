@@ -24,6 +24,8 @@ Compose 환경에서 `mailbox-webmail-ui`는 다음 값을 사용합니다.
 - `SMTP_URL=smtp://mailbox-smtp-receiver:25/?ignoreTLS=true`
 - `MAILDIR_IMPORT_DIR=/mailboxes/mailbox/Maildir`
 - `MAIL_DATA_DIR=/app/data`
+- `MAIL_ACCOUNT_DIR=/accounts`
+- `MAIL_DOMAINS=ds-mail.p-e.kr post.ds-mail.p-e.kr`
 
 ## Mail Storage
 
@@ -44,3 +46,7 @@ mail/bounced/<message-id>/
 발송 화면은 모든 발신 메일을 `sent`에 저장합니다. 실제 발송은 `SMTP_URL`로 지정된 `mailbox-smtp-receiver` 컨테이너에 접수합니다.
 
 수신자에 도메인을 입력하지 않으면 `MAIL_DEFAULT_DOMAIN` 값이 붙습니다.
+
+## Accounts
+
+회원가입은 `mailbox-account-store` named volume의 Dovecot passwd-file과 Postfix 수신 주소 map을 함께 갱신합니다. Webmail 전용 `users.json`은 사용하지 않습니다. 비밀번호는 salted bcrypt(BLF-CRYPT) hash로만 저장되며 가입한 사용자는 Webmail과 IMAP에서 같은 비밀번호를 사용합니다.

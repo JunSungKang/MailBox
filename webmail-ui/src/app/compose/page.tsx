@@ -1,49 +1,26 @@
 import { redirect } from "next/navigation";
 import { currentUserId } from "@/lib/auth";
+import ComposeForm from "./ComposeForm";
 
-export default async function ComposePage() {
+type ComposePageProps = { searchParams: Promise<{ to?: string; subject?: string }> };
+export const metadata = { title: "편지 쓰기" };
+
+export default async function ComposePage({ searchParams }: ComposePageProps) {
   const userId = await currentUserId();
   if (!userId) redirect("/login");
+  const query = await searchParams;
 
   return (
     <>
       <div className="pageHeader">
-        <h1>메일 보내기</h1>
+        <div>
+          <p className="eyebrow">A new transmission</p>
+          <h1>다음 이야기를 보내요</h1>
+          <p className="pageIntro">지금의 한마디가 누군가의 새로운 하루에 닿도록.</p>
+        </div>
       </div>
       <section className="panel">
-        <form className="form" action="/api/send" method="post" encType="multipart/form-data">
-          <div className="field">
-            <label htmlFor="from">보낸 사람</label>
-            <input
-              id="from"
-              name="from"
-              type="text"
-              value={userId}
-              readOnly
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="to">받는 사람</label>
-            <input id="to" name="to" type="text" placeholder="jskang 또는 user@example.com" required />
-          </div>
-          <div className="field">
-            <label htmlFor="subject">제목</label>
-            <input id="subject" name="subject" type="text" />
-          </div>
-          <div className="field">
-            <label htmlFor="body">본문</label>
-            <textarea id="body" name="body" required />
-          </div>
-          <div className="field">
-            <label htmlFor="attachments">첨부파일</label>
-            <input id="attachments" name="attachments" type="file" multiple />
-          </div>
-          <div className="actions">
-            <button className="button" type="submit">
-              보내기
-            </button>
-          </div>
-        </form>
+        <ComposeForm userId={userId} defaultTo={query.to || ""} defaultSubject={query.subject || ""} />
       </section>
     </>
   );

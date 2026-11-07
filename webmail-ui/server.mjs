@@ -5,8 +5,11 @@ import path from "path";
 import crypto from "crypto";
 import next from "next";
 import Busboy from "busboy";
-import nodemailer from "nodemailer";
-import { isValidUserId, normalizeUserId, sessionToken, verifySessionToken } from "./auth-core.mjs";
+import bcrypt from "bcryptjs";
+import { createSubmissionTransport, safeSmtpError } from "./smtp-transport.mjs";
+import { isValidPassword, isValidUserId, normalizeUserId, sessionToken, verifySessionToken } from "./auth-core.mjs";
+import { parseDomains, parseDovecotUsers } from "./account-core.mjs";
+import { createAccountStore } from "./account-store.mjs";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.BIND_HOST || "0.0.0.0";
@@ -17,15 +20,16 @@ const handle = app.getRequestHandler();
 const DATA_DIR = process.env.MAIL_DATA_DIR || path.join(process.cwd(), "data");
 const MAIL_ROOT = path.join(DATA_DIR, "mail");
 const TMP_ROOT = path.join(DATA_DIR, "tmp");
-const USERS_PATH = path.join(DATA_DIR, "users.json");
-const VIRTUAL_USERS_PATH = process.env.MAIL_VIRTUAL_USERS_PATH || "";
+const ACCOUNT_DIR = process.env.MAIL_ACCOUNT_DIR || path.join(DATA_DIR, "accounts");
+const DOVECOT_USERS_PATH = path.join(ACCOUNT_DIR, "dovecot-users");
+const POSTFIX_ACCOUNTS_PATH = path.join(ACCOUNT_DIR, "virtual-mailbox-accounts");
 const MAX_ATTACHMENT_BYTES = 1024 * 1024 * 1024;
 const DEFAULT_MAIL_DOMAIN = process.env.MAIL_DEFAULT_DOMAIN || "ds-mail.p-e.kr";
+const MAIL_DOMAINS = parseDomains(process.env.MAIL_DOMAINS || DEFAULT_MAIL_DOMAIN);
 const AUTH_COOKIE = "mailbox_user";
 const SESSION_SECRET = process.env.WEBMAIL_SESSION_SECRET || (dev ? "local-development-only" : "");
 const SIGNUP_TOKEN = process.env.WEBMAIL_SIGNUP_TOKEN || (dev ? "local-signup-token" : "");
 const COOKIE_SECURE = process.env.WEBMAIL_COOKIE_SECURE === "true";
-const PASSWORD_MIN_LENGTH = 12;
 const MAX_AUTH_BODY_BYTES = 16 * 1024;
 
 if (!dev && (SESSION_SECRET.length < 32 || SESSION_SECRET.startsWith("replace-with-"))) {
@@ -34,6 +38,11 @@ if (!dev && (SESSION_SECRET.length < 32 || SESSION_SECRET.startsWith("replace-wi
 if (!dev && (SIGNUP_TOKEN.length < 16 || SIGNUP_TOKEN.startsWith("replace-with-"))) {
   throw new Error("WEBMAIL_SIGNUP_TOKEN must be a non-placeholder value of at least 16 characters");
 }
+
+const submissionTransport = createSubmissionTransport();
+const accountStore = createAccountStore({ directory: ACCOUNT_DIR,
+  legacyUsersPath: path.join(DATA_DIR, "users.json"), domains: MAIL_DOMAINS,
+  onRecovery: (event) => auditLog("INFO", event, { actor: "system", status: "success" }) });
 
 const boxLabels = new Set(["inbox", "sent", "bounced"]);
 
@@ -137,10 +146,6 @@ function normalizeSender(value) {
   return process.env.MAIL_FROM || "";
 }
 
-function isValidPassword(value) {
-  return typeof value === "string" && value.length >= PASSWORD_MIN_LENGTH && value.length <= 128;
-}
-
 function requestUserId(req) {
   const cookies = String(req.headers.cookie || "").split(";");
   for (const cookie of cookies) {
@@ -154,26 +159,6 @@ function requestUserId(req) {
     }
   }
   return "";
-}
-
-function passwordHash(password, salt) {
-  return new Promise((resolve, reject) => {
-    crypto.scrypt(password, salt, 64, (error, derivedKey) => {
-      if (error) reject(error);
-      else resolve(derivedKey.toString("base64url"));
-    });
-  });
-}
-
-async function passwordRecord(userId, password) {
-  const salt = crypto.randomBytes(16).toString("base64url");
-  return { id: userId, salt, passwordHash: await passwordHash(password, salt) };
-}
-
-async function passwordMatches(user, password) {
-  const actual = await passwordHash(password, user.salt);
-  if (actual.length !== user.passwordHash.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(user.passwordHash));
 }
 
 function generatedId() {
@@ -191,46 +176,28 @@ async function ensureDirs() {
   ]);
 }
 
-async function readUsers() {
-  try {
-    const raw = await fsp.readFile(USERS_PATH, "utf8");
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item) =>
-        item &&
-        typeof item === "object" &&
-        isValidUserId(item.id) &&
-        typeof item.salt === "string" &&
-        typeof item.passwordHash === "string"
-    );
-  } catch {
-    return [];
+async function ensureAccountFiles() {
+  await fsp.mkdir(ACCOUNT_DIR, { recursive: true });
+  if (dev) {
+    await Promise.all([
+      fsp.writeFile(DOVECOT_USERS_PATH, "# MailBox development accounts\n", { flag: "wx", mode: 0o640 }).catch((error) => {
+        if (error?.code !== "EEXIST") throw error;
+      }),
+      fsp.writeFile(POSTFIX_ACCOUNTS_PATH, "# MailBox development recipient map\n", { flag: "wx", mode: 0o640 }).catch((error) => {
+        if (error?.code !== "EEXIST") throw error;
+      })
+    ]);
+    return;
   }
+  await Promise.all([fsp.access(DOVECOT_USERS_PATH), fsp.access(POSTFIX_ACCOUNTS_PATH)]);
 }
 
-async function readVirtualUsers() {
-  if (!VIRTUAL_USERS_PATH) return [];
-  try {
-    const raw = await fsp.readFile(VIRTUAL_USERS_PATH, "utf8");
-    return raw
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith("#"))
-      .map((line) => normalizeUserId(line.split(/\s+/)[0]?.split("@")[0]))
-      .filter(isValidUserId);
-  } catch {
-    return [];
-  }
-}
-
-async function readKnownUsers() {
-  const [users, virtualUsers] = await Promise.all([readUsers(), readVirtualUsers()]);
-  return [...new Set([...users.map((user) => user.id), ...virtualUsers])].sort();
-}
-
-async function writeUsers(users) {
-  await fsp.writeFile(USERS_PATH, JSON.stringify([...users].sort((a, b) => a.id.localeCompare(b.id)), null, 2));
+async function passwordMatchesAccount(userId, password) {
+  const raw = await fsp.readFile(DOVECOT_USERS_PATH, "utf8").catch(() => "");
+  const account = parseDovecotUsers(raw).find((item) => item.id === userId);
+  if (!account) return false;
+  if (!account.passwordHash.startsWith("{BLF-CRYPT}")) return false;
+  return bcrypt.compare(password, account.passwordHash.slice("{BLF-CRYPT}".length));
 }
 
 async function parseUrlEncodedForm(req) {
@@ -309,24 +276,36 @@ async function handleAuth(req, res, pathname) {
   const password = form.get("password")?.toString() || "";
   const signupToken = form.get("signupToken")?.toString() || "";
   if (!isValidUserId(userId)) {
+    auditWarn("auth.request.rejected", { ...context, reason: "invalid_user_id", status: 303, durationMs: Date.now() - startedAt });
     redirect(res, pathname === "/api/auth/login" ? "/login?error=invalid" : "/signup?error=invalid");
     return true;
   }
 
-  const users = await readUsers();
-  const knownUsers = await readKnownUsers();
-  const registeredUser = users.find((user) => user.id === userId);
-
-  if (pathname === "/api/auth/login" && (!registeredUser || !(await passwordMatches(registeredUser, password)))) {
-    auditWarn("auth.login.invalid_credentials", {
-      ...context,
-      userId,
-      durationMs: Date.now() - startedAt
-    });
-    redirect(res, "/login?error=invalid_credentials");
-    return true;
+  if (pathname === "/api/auth/login") {
+    try {
+      if (!(await passwordMatchesAccount(userId, password))) {
+        auditWarn("auth.login.invalid_credentials", {
+          ...context,
+          userId,
+          durationMs: Date.now() - startedAt
+        });
+        redirect(res, "/login?error=invalid_credentials");
+        return true;
+      }
+    } catch (error) {
+      auditError("auth.login.backend_failure", {
+        ...context,
+        userId,
+        status: 503,
+        error,
+        durationMs: Date.now() - startedAt
+      });
+      redirect(res, "/login?error=unavailable");
+      return true;
+    }
   }
 
+  let provisionedAccount;
   if (pathname === "/api/auth/signup") {
     const validSignupToken =
       signupToken.length === SIGNUP_TOKEN.length &&
@@ -337,28 +316,32 @@ async function handleAuth(req, res, pathname) {
       return true;
     }
     if (!isValidPassword(password)) {
+      auditWarn("auth.signup.invalid_password", { ...context, userId, status: 303, durationMs: Date.now() - startedAt });
       redirect(res, "/signup?error=weak_password");
       return true;
     }
-    if (registeredUser) {
-      auditWarn("auth.signup.exists", {
+    try {
+      provisionedAccount = await accountStore.provision(userId, password);
+    } catch (error) {
+      if (error?.code === "ACCOUNT_EXISTS") {
+        auditWarn("auth.signup.exists", {
+          ...context,
+          userId,
+          durationMs: Date.now() - startedAt
+        });
+        redirect(res, "/signup?error=exists");
+        return true;
+      }
+      auditError("auth.signup.provision_failure", {
         ...context,
         userId,
+        status: 503,
+        error,
         durationMs: Date.now() - startedAt
       });
-      redirect(res, "/signup?error=exists");
+      redirect(res, "/signup?error=unavailable");
       return true;
     }
-    if (!knownUsers.includes(userId)) {
-      auditWarn("auth.signup.unknown_mailbox", {
-        ...context,
-        userId,
-        durationMs: Date.now() - startedAt
-      });
-      redirect(res, "/signup?error=unknown_mailbox");
-      return true;
-    }
-    await writeUsers([...users, await passwordRecord(userId, password)]);
   }
 
   setAuthCookie(res, userId);
@@ -366,6 +349,8 @@ async function handleAuth(req, res, pathname) {
     ...context,
     actor: userId,
     userId,
+    addressCount: provisionedAccount?.addressCount,
+    domains: provisionedAccount?.domains,
     durationMs: Date.now() - startedAt
   });
   redirect(res, "/inbox");
@@ -385,24 +370,8 @@ async function sendViaConfiguredTransport(meta, bodyText, attachments) {
     }))
   };
 
-  if (process.env.SMTP_URL) {
-    const transporter = nodemailer.createTransport(process.env.SMTP_URL);
-    await transporter.sendMail(mail);
-    return { attempted: true, ok: true, detail: "Postfix 접수 완료" };
-  }
-
-  const sendmailPath = process.env.SENDMAIL_PATH || "/usr/sbin/sendmail";
-  if (fs.existsSync(sendmailPath)) {
-    const transporter = nodemailer.createTransport({
-      sendmail: true,
-      newline: "unix",
-      path: sendmailPath
-    });
-    await transporter.sendMail(mail);
-    return { attempted: true, ok: true, detail: "sendmail 발송 완료" };
-  }
-
-  return { attempted: false, ok: false, detail: "SMTP_URL 또는 sendmail을 찾을 수 없습니다." };
+  await submissionTransport.sendMail(mail);
+  return { attempted: true, ok: true, detail: "Postfix 접수 완료" };
 }
 
 async function handleSend(req, res) {
@@ -588,7 +557,7 @@ async function handleSend(req, res) {
         meta.delivery = {
           attempted: true,
           ok: false,
-          detail: error instanceof Error ? error.message : "발송 실패"
+          detail: "보안 SMTP 제출에 실패했습니다. 연결 및 인증 설정을 확인하세요."
         };
         auditError("mail.send.smtp_failure", {
           ...context,
@@ -599,7 +568,7 @@ async function handleSend(req, res) {
           recipientDomains: [...new Set(meta.to.map((recipient) => recipient.split("@")[1]).filter(Boolean))],
           attachmentCount: attachments.length,
           attachmentBytes: attachments.reduce((sum, attachment) => sum + attachment.size, 0),
-          error
+          error: safeSmtpError(error)
         });
       }
 
@@ -737,7 +706,8 @@ function messageOwnedByUser(meta, userId) {
   return Array.isArray(meta.to) && meta.to.some((recipient) => addressBelongsToUser(recipient, userId));
 }
 
-await ensureDirs();
+await Promise.all([ensureDirs(), ensureAccountFiles()]);
+await accountStore.recover();
 await app.prepare();
 
 http

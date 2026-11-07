@@ -12,7 +12,7 @@ imap-mailbox/          # Maildir을 제공하는 IMAP 서버
 webmail-ui/            # 메일 조회, 작성, 사용자 화면
 docs/                  # 아키텍처와 설치·운영 문서
 docker-compose.yml     # 소스 빌드 기반 개발 실행
-docker-compose.prod.yml # 이미지 pull 기반 운영 실행
+docker-compose.prod.yml # HTTPS 프록시를 포함한 운영 실행
 .env.example           # 공통 환경변수 예시
 ```
 
@@ -22,11 +22,12 @@ docker-compose.prod.yml # 이미지 pull 기반 운영 실행
 
 ```bash
 cp .env.example .env
+# .env의 보안 값을 바꾸고 TLS 인증서를 준비한다. 아래 설치 문서 참고.
 docker compose up -d --build
 docker compose ps
 ```
 
-기본 접속 지점은 Webmail `http://localhost:18080`, SMTP `localhost:25`, IMAP `localhost:143`이다.
+개발 Webmail은 `http://localhost:18080`에서 로컬로 접속한다. SMTP `25`, IMAP `143`은 TLS 1.2 이상의 STARTTLS를 지원하며 IMAP 로그인은 TLS 연결을 요구한다. 두 실행 환경 모두 `MAIL_TLS_DIR`에 `fullchain.pem`, `privkey.pem`이 필요하다. 인증서 준비는 [설치 안내](docs/developer/guides/installation.md)를 따른다.
 
 중지할 때 `docker compose down`은 데이터를 보존한다. `docker compose down -v`는 메일을 포함한 named volume을 삭제하므로 복구가 필요 없는 경우에만 사용한다.
 
@@ -37,6 +38,8 @@ docker compose ps
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
 ```
+
+운영 Webmail은 `https://<MAIL_WEB_HOSTNAME>:18443`에서 접속한다. 기본 HTTP `18080`은 HTTPS로 이동하며, Webmail 서버는 내부 네트워크에만 노출된다. 인증서와 개인키, 계정 데이터, `.env`는 커밋하지 않는다.
 
 ## 문서
 

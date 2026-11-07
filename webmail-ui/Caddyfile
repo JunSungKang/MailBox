@@ -1,0 +1,14 @@
+# Legacy rollback configuration; current proxy uses nginx.conf.template.
+{
+	admin off
+	auto_https off
+}
+
+http://:8080 {
+	redir https://{$MAIL_WEB_HOSTNAME}:{$MAIL_WEB_HTTPS_PORT}{uri} 308
+}
+
+https://:8443 {
+	tls /etc/mailbox/tls/fullchain.pem /etc/mailbox/tls/privkey.pem
+	reverse_proxy mailbox-webmail-ui:3000
+}

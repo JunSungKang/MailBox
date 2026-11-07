@@ -10,13 +10,23 @@ services:
     environment:
       MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.ds-mail.p-e.kr}
       MAIL_DOMAINS: ${MAIL_DOMAINS:-ds-mail.p-e.kr post.ds-mail.p-e.kr crmnova-fin.kro.kr post.crmnova-fin.kro.kr}
-      MYNETWORKS: ${MYNETWORKS:-127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16}
+      SMTP_AUTH_USER: ${SMTP_AUTH_USER:-mailbox-submit}
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETPCAP, SETUID, SETGID, KILL]
+    security_opt: [no-new-privileges:true]
     ports:
-      - "${SMTP_PORT:-25}:25"
+      - "${SMTP_PORT:-25}:2525"
     volumes:
       - mailbox-store:/var/mail/vhosts
       - smtp-queue-store:/var/spool/postfix
-      - ./smtp-receiver/virtual-mailbox-accounts:/config/virtual-mailbox-accounts:ro
+      - smtp-auth-store:/run/smtp-auth:ro
+      - mailbox-account-store:/accounts
+      - type: bind
+        source: ${MAIL_TLS_DIR:-./tls}
+        target: /etc/mailbox/tls
+        read_only: true
+        bind:
+          create_host_path: false
 
   mailbox-imap-mailbox:
     image: mailbox-imap-mailbox:dev
@@ -29,7 +39,15 @@ services:
     ports:
       - "${IMAP_PORT:-143}:143"
     volumes:
+      - smtp-auth-store:/run/smtp-auth
       - mailbox-store:/var/mail/vhosts
+      - mailbox-account-store:/accounts
+      - type: bind
+        source: ${MAIL_TLS_DIR:-./tls}
+        target: /etc/mailbox/tls
+        read_only: true
+        bind:
+          create_host_path: false
 
   mailbox-webmail-ui:
     image: mailbox-webmail-ui:dev
@@ -44,19 +62,38 @@ services:
       PORT: 3000
       MAIL_DATA_DIR: /app/data
       MAILDIR_IMPORT_DIR: /mailboxes/mailbox/Maildir
-      MAIL_VIRTUAL_USERS_PATH: /config/virtual-mailbox-accounts
-      SMTP_URL: smtp://mailbox-smtp-receiver:25/?ignoreTLS=true
+      MAILDIR_IMPORT_PARENT_DIR: /mailboxes
+      MAIL_ACCOUNT_DIR: /accounts
+      MAIL_DOMAINS: ${MAIL_DOMAINS:-ds-mail.p-e.kr post.ds-mail.p-e.kr crmnova-fin.kro.kr post.crmnova-fin.kro.kr}
+      SMTP_HOST: mailbox-smtp-receiver
+      SMTP_SUBMISSION_PORT: 2587
+      SMTP_AUTH_USER: ${SMTP_AUTH_USER:-mailbox-submit}
+      SMTP_AUTH_PASSWORD: ${SMTP_AUTH_PASSWORD:?SMTP_AUTH_PASSWORD is required}
+      SMTP_TLS_SERVERNAME: ${MAIL_HOSTNAME:-mail.ds-mail.p-e.kr}
+      SMTP_TLS_CA_FILE: /etc/mailbox/smtp-ca.pem
       MAIL_FROM: ${MAIL_FROM:-mailbox@ds-mail.p-e.kr}
       MAIL_DEFAULT_DOMAIN: ${MAIL_DEFAULT_DOMAIN:-ds-mail.p-e.kr}
       WEBMAIL_SESSION_SECRET: ${WEBMAIL_SESSION_SECRET:-local-development-only}
       WEBMAIL_SIGNUP_TOKEN: ${WEBMAIL_SIGNUP_TOKEN:-local-signup-token}
       WEBMAIL_COOKIE_SECURE: ${WEBMAIL_COOKIE_SECURE:-false}
     ports:
-      - "${MAIL_WEB_PORT:-18080}:3000"
+      - "127.0.0.1:${MAIL_WEB_PORT:-18080}:3000"
     volumes:
+      - type: bind
+        source: ${MAIL_SMTP_CA_FILE:-./tls/ca.pem}
+        target: /etc/mailbox/smtp-ca.pem
+        read_only: true
+        bind:
+          create_host_path: false
       - webmail-data-store:/app/data
       - mailbox-store:/mailboxes:ro
-      - ./smtp-receiver/virtual-mailbox-accounts:/config/virtual-mailbox-accounts:ro
+      - mailbox-account-store:/accounts
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${MAIL_NETWORK_SUBNET:-172.25.0.0/16}
 
 volumes:
   mailbox-store:
@@ -65,3 +102,7 @@ volumes:
     name: smtp-queue-store
   webmail-data-store:
     name: webmail-data-store
+  mailbox-account-store:
+    name: mailbox-account-store
+  smtp-auth-store:
+    name: ${SMTP_AUTH_VOLUME:-smtp-auth-store}

@@ -5,7 +5,11 @@ export function normalizeUserId(value) {
 }
 
 export function isValidUserId(value) {
-  return /^[a-z0-9._-]{1,64}$/.test(value);
+  return typeof value === "string" && value !== "." && value !== ".." && /^[a-z0-9._-]{1,64}$/.test(value);
+}
+
+export function isValidPassword(value) {
+  return typeof value === "string" && value.length >= 12 && !value.includes("\0") && Buffer.byteLength(value, "utf8") <= 72;
 }
 
 export function sessionToken(userId, secret) {
