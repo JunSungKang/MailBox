@@ -49,7 +49,8 @@ test("unreadable legacy metadata cannot silently release a reserved ID", async (
 }));
 
 test("rejects truncated-password and traversal attempts before persisting anything", async () => fixture(async (f) => {
-  for (const candidate of ["가".repeat(24) + "a", "가".repeat(24) + "b", "a".repeat(73)]) {
+  for (const candidate of ["가".repeat(24) + "a", "가".repeat(24) + "b", "a".repeat(73),
+    new URLSearchParams("password=synthetic%00password").get("password")]) {
     await assert.rejects(f.store.provision("owner", candidate), /Invalid password length/);
   }
   for (const id of [".", "..", "../other"]) await assert.rejects(f.store.provision(id, password), /Invalid user id/);

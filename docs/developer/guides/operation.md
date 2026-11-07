@@ -83,7 +83,7 @@ docker compose -f docker-compose.prod.yml logs mailbox-smtp-receiver
 
 계정 파일을 호스트나 컨테이너에서 직접 수정하지 않는다. 복구가 필요하면 먼저 `mailbox-account-store` volume을 백업하고 두 계정 파일의 일관성을 함께 확인한다.
 
-이전 `webmail-data-store/users.json`을 삭제하지 않는다. 이 파일의 기존 ID는 예약되며, 사용자가 가입 코드와 기존 scrypt 비밀번호를 함께 증명해야 같은 ID의 Dovecot 계정을 만들 수 있다. 이미 전환된 Dovecot 계정은 변경하지 않는다. 기존 비밀번호가 UTF-8 72바이트를 넘거나 이전 정보가 손상됐다면 자동 이전을 차단한다. 운영자는 원래 소유자를 확인한 뒤 별도 복구를 수행하며 ID 예약을 풀기 위해 이전 파일을 삭제해서는 안 된다.
+이전 `webmail-data-store/users.json`을 삭제하지 않는다. 이 파일의 기존 ID는 예약되며, 사용자가 가입 코드와 기존 scrypt 비밀번호를 함께 증명해야 같은 ID의 Dovecot 계정을 만들 수 있다. 이미 전환된 Dovecot 계정은 변경하지 않는다. 기존 비밀번호가 UTF-8 72바이트를 넘거나 SASL PLAIN에서 금지된 NUL 문자를 포함하거나 이전 정보가 손상됐다면 자동 이전을 차단한다. 운영자는 원래 소유자를 확인한 뒤 별도 복구를 수행하며 ID 예약을 풀기 위해 이전 파일을 삭제해서는 안 된다.
 
 계정 생성은 두 파일을 교체하기 전에 같은 volume에 mode `0600`의 `.provision.pending.json` 복구 기록을 남긴다. 프로세스가 중단되면 시작 시와 다음 가입 요청에서 동일한 잠금 아래 나머지 교체를 완료한다. 중단된 잠금은 30초 뒤 회수하므로 재시작 직후 `Account store is busy`가 나오면 30초 후 다시 시작한다. 복구 성공은 `auth.account.recovered`, 이전 버전의 부분 계정 수신 주소 보정은 `auth.account.reconciled` INFO 이벤트로 확인한다. 이전 Dovecot 파일의 비밀번호 hash와 기존 별칭은 보존한다.
 
