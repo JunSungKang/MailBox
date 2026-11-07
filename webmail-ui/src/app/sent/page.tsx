@@ -26,15 +26,15 @@ export default async function SentPage() {
     <>
       <div className="pageHeader">
         <div>
-          <p className="eyebrow">Sent</p>
-          <h1>떠나보낸 편지</h1>
-          <p className="pageIntro">당신이 전한 마음이 어디로 향했는지 살펴보세요.</p>
+          <p className="eyebrow">Outgoing signals · Sent</p>
+          <h1>당신이 보낸 편지</h1>
+          <p className="pageIntro">다음 이야기를 향해 보낸 마음들을 모았어요.</p>
         </div>
         <span className="countPill">{messages.length}통</span>
       </div>
       <section className="panel">
         {messages.length === 0 ? (
-          <div className="empty"><span className="emptyIcon" aria-hidden="true">✦</span><strong>아직 보낸 편지가 없어요</strong><span>첫 이야기를 하늘에 띄워볼까요?</span><Link className="softButton" href="/compose">편지 쓰기</Link></div>
+          <div className="empty"><span className="emptyIcon" aria-hidden="true">↗</span><strong>아직 보낸 편지가 없어요</strong><span>다음 이야기는 당신의 한마디로 시작해요.</span><Link className="softButton" href="/compose">편지 쓰기</Link></div>
         ) : (
           <div className="mailList">
             <div className="mailListHead" aria-hidden="true"><span>받는 사람</span><span>제목</span><span className="date">보낸 때</span></div>

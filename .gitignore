@@ -11,3 +11,8 @@ webmail-ui/data/
 !*.env.example
 logs/
 *.log
+
+tls/
+*.pem
+*.key
+*.crt

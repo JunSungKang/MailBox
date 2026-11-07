@@ -6,7 +6,7 @@ import crypto from "crypto";
 import next from "next";
 import Busboy from "busboy";
 import bcrypt from "bcryptjs";
-import nodemailer from "nodemailer";
+import { createSubmissionTransport, safeSmtpError } from "./smtp-transport.mjs";
 import { isValidUserId, normalizeUserId, sessionToken, verifySessionToken } from "./auth-core.mjs";
 import { mergeDovecotUser, mergePostfixAccounts, parseDomains, parseDovecotUsers } from "./account-core.mjs";
 
@@ -39,6 +39,8 @@ if (!dev && (SESSION_SECRET.length < 32 || SESSION_SECRET.startsWith("replace-wi
 if (!dev && (SIGNUP_TOKEN.length < 16 || SIGNUP_TOKEN.startsWith("replace-with-"))) {
   throw new Error("WEBMAIL_SIGNUP_TOKEN must be a non-placeholder value of at least 16 characters");
 }
+
+const submissionTransport = createSubmissionTransport();
 
 const boxLabels = new Set(["inbox", "sent", "bounced"]);
 
@@ -429,24 +431,8 @@ async function sendViaConfiguredTransport(meta, bodyText, attachments) {
     }))
   };
 
-  if (process.env.SMTP_URL) {
-    const transporter = nodemailer.createTransport(process.env.SMTP_URL);
-    await transporter.sendMail(mail);
-    return { attempted: true, ok: true, detail: "Postfix 접수 완료" };
-  }
-
-  const sendmailPath = process.env.SENDMAIL_PATH || "/usr/sbin/sendmail";
-  if (fs.existsSync(sendmailPath)) {
-    const transporter = nodemailer.createTransport({
-      sendmail: true,
-      newline: "unix",
-      path: sendmailPath
-    });
-    await transporter.sendMail(mail);
-    return { attempted: true, ok: true, detail: "sendmail 발송 완료" };
-  }
-
-  return { attempted: false, ok: false, detail: "SMTP_URL 또는 sendmail을 찾을 수 없습니다." };
+  await submissionTransport.sendMail(mail);
+  return { attempted: true, ok: true, detail: "Postfix 접수 완료" };
 }
 
 async function handleSend(req, res) {
@@ -632,7 +618,7 @@ async function handleSend(req, res) {
         meta.delivery = {
           attempted: true,
           ok: false,
-          detail: error instanceof Error ? error.message : "발송 실패"
+          detail: "보안 SMTP 제출에 실패했습니다. 연결 및 인증 설정을 확인하세요."
         };
         auditError("mail.send.smtp_failure", {
           ...context,
@@ -643,7 +629,7 @@ async function handleSend(req, res) {
           recipientDomains: [...new Set(meta.to.map((recipient) => recipient.split("@")[1]).filter(Boolean))],
           attachmentCount: attachments.length,
           attachmentBytes: attachments.reduce((sum, attachment) => sum + attachment.size, 0),
-          error
+          error: safeSmtpError(error)
         });
       }
 

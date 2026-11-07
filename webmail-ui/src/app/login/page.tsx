@@ -1,4 +1,5 @@
 import Link from "next/link";
+import TemporalEmblem from "../TemporalEmblem";
 
 type LoginPageProps = {
   searchParams: Promise<{
@@ -24,10 +25,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <div className="authWrap">
+      <TemporalEmblem />
       <div className="pageHeader">
-        <p className="eyebrow">Welcome back</p>
-        <h1>다시, 당신의 하늘로</h1>
-        <p className="pageIntro">도착한 마음과 이어 쓰던 이야기를 만나보세요.</p>
+        <p className="eyebrow">A letter from tomorrow</p>
+        <h1>내일의 우편함을 열어요</h1>
+        <p className="pageIntro">익숙한 하루에 도착한, 조금은 신비로운 이야기.</p>
       </div>
       <section className="panel authPanel">
         <form className="form" action="/api/auth/login" method="post">

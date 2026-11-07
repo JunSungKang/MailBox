@@ -27,15 +27,15 @@ export default async function InboxPage() {
     <>
       <div className="pageHeader">
         <div>
-          <p className="eyebrow">Inbox</p>
-          <h1>오늘 도착한 편지</h1>
-          <p className="pageIntro">당신에게 닿은 이야기들을 천천히 열어보세요.</p>
+          <p className="eyebrow">Incoming signals · Inbox</p>
+          <h1>당신에게 도착한 편지</h1>
+          <p className="pageIntro">작은 신호 하나가 새로운 이야기를 열어줄 거예요.</p>
         </div>
         <span className="countPill">{messages.length}통</span>
       </div>
       <section className="panel">
         {messages.length === 0 ? (
-          <div className="empty"><span className="emptyIcon" aria-hidden="true">☁</span><strong>아직 도착한 편지가 없어요</strong><span>새 편지가 오면 이곳에 포근히 내려앉을 거예요.</span></div>
+          <div className="empty"><span className="emptyIcon" aria-hidden="true">◎</span><strong>새로운 이야기가 시작될 곳</strong><span>새 편지가 도착하면 이곳에서 열어볼 수 있어요.</span></div>
         ) : (
           <div className="mailList">
             <div className="mailListHead" aria-hidden="true"><span>보낸 사람</span><span>제목</span><span className="date">도착한 때</span></div>
