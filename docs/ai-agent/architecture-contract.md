@@ -42,7 +42,7 @@ SMTP나 IMAP 모듈이 Webmail 내부 파일을 import하거나, Webmail이 Post
 
 ## Security Invariants
 
-- 비밀번호는 Dovecot 호환 salted bcrypt(BLF-CRYPT) hash로만 저장하며 평문으로 기록하지 않는다.
+- 신규 비밀번호는 8~128자로 받으며 Dovecot 호환 salted Argon2id hash로 저장해 긴 비밀번호 전체를 검증한다. 기존 BLF-CRYPT 계정은 hash를 바꾸지 않고 계속 검증한다. 평문 비밀번호는 저장·기록하지 않는다.
 - SMTP `25`는 TLS 1.2 이상의 STARTTLS를 제공하고, IMAP `143`은 STARTTLS 후 로그인을 요구한다.
 - `MAIL_TLS_DIR`의 서버 인증서·키만 각 서비스에 read-only로 mount한다. CA 개인키는 해당 디렉터리 밖에 보관하며 인증서·키·`.env`는 추적하지 않는다.
 - 운영 HTTPS 프록시만 Webmail을 외부에 노출하며 로그인 cookie는 `Secure`를 사용한다. 개발 HTTP는 loopback 전용이다.

@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { promisify } from "node:util";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "./password-core.mjs";
 import { isValidPassword, isValidUserId, normalizeUserId } from "./auth-core.mjs";
 import { mergeDovecotUser, mergePostfixAccounts, parseDovecotUsers } from "./account-core.mjs";
 
@@ -137,7 +137,7 @@ export function createAccountStore({ directory, legacyUsersPath, domains, onReco
         const before = await readAccounts();
         if (parseDovecotUsers(before.dovecot).some((account) => account.id === userId)) throw accountExists();
         await verifyLegacyOwnership(userId, password);
-        const passwordHash = `{BLF-CRYPT}${await bcrypt.hash(password, 12)}`;
+        const passwordHash = await hashPassword(password);
         const after = {
           dovecot: mergeDovecotUser(before.dovecot, userId, passwordHash),
           postfix: mergePostfixAccounts(before.postfix, userId, domains)
