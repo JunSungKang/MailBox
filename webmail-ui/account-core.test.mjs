@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 
 import { dovecotUserLine, mergeDovecotUser, mergePostfixAccounts, parseDomains, parseDovecotUsers } from "./account-core.mjs";
 
-const hash = "{BLF-CRYPT}$2b$12$123456789012345678901u12345678901234567890123456789012";
+const hash = `{BLF-CRYPT}${bcrypt.hashSync("synthetic-account-password", 4)}`;
 
 test("normalizes configured mail domains", () => {
   assert.deepEqual(parseDomains("Example.com example.com, post.example.com invalid"), ["example.com", "post.example.com"]);

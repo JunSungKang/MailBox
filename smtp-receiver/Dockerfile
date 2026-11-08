@@ -2,7 +2,7 @@ FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f407
 
 RUN rm -rf /usr/local/lib/node_modules /opt/yarn* /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg \
   && apk upgrade --no-cache \
-  && apk add --no-cache ca-certificates postfix bash setpriv \
+  && apk add --no-cache ca-certificates postfix bash setpriv 'zlib>=1.4-r0' \
   && test "$(apk version -t "$(postconf -h mail_version)" 3.11.2)" != "<" \
   && apk add --no-cache --virtual .identity-tools shadow \
   && groupmod -g 1500 postfix \
