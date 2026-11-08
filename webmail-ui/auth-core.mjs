@@ -9,7 +9,7 @@ export function isValidUserId(value) {
 }
 
 export function isValidPassword(value) {
-  return typeof value === "string" && value.length >= 12 && !value.includes("\0") && Buffer.byteLength(value, "utf8") <= 72;
+  return typeof value === "string" && value.length >= 8 && value.length <= 128 && !value.includes("\0");
 }
 
 export function sessionToken(userId, secret) {

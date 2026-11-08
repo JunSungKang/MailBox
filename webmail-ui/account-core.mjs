@@ -1,4 +1,5 @@
 import { isValidUserId } from "./auth-core.mjs";
+import { isSupportedPasswordHash } from "./password-core.mjs";
 const domainPattern = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export function parseDomains(value) {
@@ -19,7 +20,7 @@ export function parseDovecotUsers(raw) {
 
 export function dovecotUserLine(userId, passwordHash) {
   if (!isValidUserId(userId)) throw new Error("Invalid user id");
-  if (!/^\{BLF-CRYPT\}\$2[aby]\$/.test(passwordHash)) throw new Error("Invalid password hash");
+  if (!isSupportedPasswordHash(passwordHash)) throw new Error("Invalid password hash");
   return `${userId}:${passwordHash}:5000:5000::/var/mail/vhosts/${userId}::`;
 }
 

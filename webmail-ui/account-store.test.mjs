@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import bcrypt from "bcryptjs";
+import { verifyPassword } from "./password-core.mjs";
 import { createAccountStore } from "./account-store.mjs";
 import { mergeDovecotUser, mergePostfixAccounts, parseDovecotUsers } from "./account-core.mjs";
 
@@ -35,7 +36,7 @@ test("legacy account IDs require their original password before migration", asyn
   assert.equal(await fs.readFile(f.recipients, "utf8"), "# original recipients\n");
   await f.store.provision("owner", password);
   const account = parseDovecotUsers(await fs.readFile(f.users, "utf8"))[0];
-  assert.equal(await bcrypt.compare(password, account.passwordHash.slice("{BLF-CRYPT}".length)), true);
+  assert.equal(await verifyPassword(password, account.passwordHash), true);
   assert.match(await fs.readFile(f.recipients, "utf8"), /owner@example\.com owner\/Maildir\//);
   assert.equal(await fs.readFile(f.legacy, "utf8"), legacyRaw);
 }));
@@ -48,17 +49,19 @@ test("unreadable legacy metadata cannot silently release a reserved ID", async (
   assert.equal(await fs.readFile(f.users, "utf8"), "# original accounts\n");
 }));
 
-test("rejects truncated-password and traversal attempts before persisting anything", async () => fixture(async (f) => {
-  for (const candidate of ["가".repeat(24) + "a", "가".repeat(24) + "b", "a".repeat(73),
+test("rejects invalid credentials before writes and preserves all long-password characters", async () => fixture(async (f) => {
+  for (const candidate of ["a".repeat(7), "a".repeat(129),
     new URLSearchParams("password=synthetic%00password").get("password")]) {
     await assert.rejects(f.store.provision("owner", candidate), /Invalid password length/);
   }
   for (const id of [".", "..", "../other"]) await assert.rejects(f.store.provision(id, password), /Invalid user id/);
   assert.equal(await fs.readFile(f.users, "utf8"), "# original accounts\n");
   assert.equal(await fs.readFile(f.recipients, "utf8"), "# original recipients\n");
-  await f.store.provision("owner", "가".repeat(24));
+  const longPassword = "가".repeat(127) + "A";
+  await f.store.provision("owner", longPassword);
   const account = parseDovecotUsers(await fs.readFile(f.users, "utf8"))[0];
-  assert.equal(await bcrypt.compare("가".repeat(24), account.passwordHash.slice("{BLF-CRYPT}".length)), true);
+  assert.equal(await verifyPassword(longPassword, account.passwordHash), true);
+  assert.equal(await verifyPassword("가".repeat(127) + "B", account.passwordHash), false);
 }));
 
 test("restarts after a real process kill between the two account-file renames", async () => fixture(async (f) => {

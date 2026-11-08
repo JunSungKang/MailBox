@@ -65,4 +65,4 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ## 기존 설치 전환
 
-기존 `webmail-data-store/users.json`의 scrypt hash는 Dovecot passwd-file hash로 안전하게 변환할 수 없다. 기존 설치를 전환할 때는 데이터를 백업하고 기존 사용자가 운영 가입 코드로 다시 가입하도록 안내한다. 기존 `users.json`은 새 버전에서 읽거나 갱신하지 않으며, 확인 전 임의로 삭제하지 않는다.
+기존 `webmail-data-store/users.json`의 scrypt hash는 Dovecot passwd-file hash로 안전하게 변환할 수 없다. 기존 설치를 전환할 때는 데이터를 백업하고 기존 사용자가 운영 가입 코드와 기존 비밀번호로 다시 가입하도록 안내한다. 새 버전은 `users.json`의 기존 ID를 예약하고 scrypt 비밀번호로 소유권을 검증한 뒤 Argon2id 계정을 생성한다. 원본 `users.json`은 변경하거나 임의로 삭제하지 않는다. 기존 Dovecot BLF-CRYPT 계정과 hash는 그대로 유지한다.
