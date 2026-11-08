@@ -5,7 +5,7 @@ import path from "path";
 import crypto from "crypto";
 import next from "next";
 import Busboy from "busboy";
-import bcrypt from "bcryptjs";
+import { verifyPassword } from "./password-core.mjs";
 import { createSubmissionTransport, safeSmtpError } from "./smtp-transport.mjs";
 import { isValidPassword, isValidUserId, normalizeUserId, sessionToken, verifySessionToken } from "./auth-core.mjs";
 import { parseDomains, parseDovecotUsers } from "./account-core.mjs";
@@ -196,8 +196,7 @@ async function passwordMatchesAccount(userId, password) {
   const raw = await fsp.readFile(DOVECOT_USERS_PATH, "utf8").catch(() => "");
   const account = parseDovecotUsers(raw).find((item) => item.id === userId);
   if (!account) return false;
-  if (!account.passwordHash.startsWith("{BLF-CRYPT}")) return false;
-  return bcrypt.compare(password, account.passwordHash.slice("{BLF-CRYPT}".length));
+  return verifyPassword(password, account.passwordHash);
 }
 
 async function parseUrlEncodedForm(req) {

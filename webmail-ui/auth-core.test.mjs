@@ -28,9 +28,9 @@ test("rejects directory identifiers before issuing a usable session", () => {
   for (const id of ["damgo-x2", "a.b", "_account", "..."]) assert.equal(isValidUserId(id), true);
 });
 
-test("bounds new passwords by UTF-8 bytes at bcrypt's 72-byte limit", () => {
-  for (const password of ["a".repeat(72), "가".repeat(24), "😀".repeat(18)]) assert.equal(isValidPassword(password), true);
-  for (const password of ["a".repeat(73), "가".repeat(24) + "a", "😀".repeat(19), "short", null]) {
+test("preserves the requested 8-128 character range without a byte ceiling", () => {
+  for (const password of ["a".repeat(8), "a".repeat(73), "a".repeat(128), "가".repeat(128), "😀".repeat(64)]) assert.equal(isValidPassword(password), true);
+  for (const password of ["a".repeat(7), "a".repeat(129), "가".repeat(129), null]) {
     assert.equal(isValidPassword(password), false);
   }
 });

@@ -15,7 +15,7 @@ function firstValue(value: string | string[] | undefined): string {
 function errorMessage(error: string): string {
   if (error === "exists") return "이미 가입된 아이디입니다.";
   if (error === "invalid") return "아이디는 영문 소문자, 숫자, 점, 밑줄, 하이픈만 사용할 수 있으며 점 한 개 또는 두 개는 사용할 수 없습니다.";
-  if (error === "weak_password") return "비밀번호는 12자 이상, UTF-8 기준 72바이트 이하이며 널 문자를 포함할 수 없습니다.";
+  if (error === "weak_password") return "비밀번호는 8~128자로 입력해야 하며 널 문자를 포함할 수 없습니다.";
   if (error === "invalid_signup_token") return "가입 코드가 올바르지 않습니다.";
   if (error === "unavailable") return "계정을 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.";
   return "";
@@ -42,8 +42,8 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
           </div>
           <div className="field">
             <label htmlFor="password">비밀번호</label>
-            <input id="password" name="password" type="password" minLength={12} maxLength={72} autoComplete="new-password" required />
-            <p className="fieldHint">12자 이상, UTF-8 기준 72바이트 이하로 입력해 주세요. 한글은 보통 한 글자에 3바이트예요.</p>
+            <input id="password" name="password" type="password" minLength={8} maxLength={128} autoComplete="new-password" required />
+            <p className="fieldHint">8~128자로 입력해 주세요.</p>
             <p className="fieldHint">이전에 사용하던 계정은 기존 비밀번호로 가입해 주세요.</p>
           </div>
           <div className="field">
