@@ -12,7 +12,7 @@ services:
       MAIL_DOMAINS: ${MAIL_DOMAINS:-ds-mail.p-e.kr post.ds-mail.p-e.kr crmnova-fin.kro.kr post.crmnova-fin.kro.kr}
       SMTP_AUTH_USER: ${SMTP_AUTH_USER:-mailbox-submit}
     cap_drop: [ALL]
-    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETPCAP, SETUID, SETGID, KILL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETPCAP, SETUID, SETGID, KILL, NET_BIND_SERVICE]
     security_opt: [no-new-privileges:true]
     ports:
       - "${SMTP_PORT:-25}:2525"

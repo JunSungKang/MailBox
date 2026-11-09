@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { simpleParser } from "mailparser";
 import { auditError, auditInfo, auditWarn } from "./auditLogger";
 import { textToHtml } from "./text";
+import { canonicalMaildirKey } from "./maildirIdentity";
 
 export type MailBox = "inbox" | "sent" | "bounced";
 
@@ -208,7 +209,20 @@ async function readMaildirImportState(): Promise<Set<string>> {
 }
 
 async function writeMaildirImportState(values: Set<string>): Promise<void> {
-  await fs.writeFile(maildirImportStatePath, JSON.stringify([...values].sort(), null, 2));
+  const temporary = `${maildirImportStatePath}.${crypto.randomUUID()}.tmp`;
+  const existing = await fs.stat(maildirImportStatePath).catch((error) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (existing && (existing.uid !== process.getuid?.() || existing.gid !== process.getgid?.())) {
+    throw new Error("Import ledger ownership mismatch");
+  }
+  try {
+    await fs.writeFile(temporary, JSON.stringify([...values].sort(), null, 2), { flag: "wx", mode: existing ? existing.mode & 0o777 : 0o644 });
+    await fs.rename(temporary, maildirImportStatePath);
+  } finally {
+    await fs.rm(temporary, { force: true });
+  }
 }
 
 type MaildirSource = {
@@ -279,12 +293,20 @@ async function listMaildirFiles(): Promise<MaildirFile[]> {
   return sourceFiles.flat();
 }
 
-async function ingestMaildir(): Promise<void> {
+let maildirImportPromise: Promise<void> | undefined;
+function ingestMaildir(): Promise<void> {
+  // One Webmail writer owns this volume. Concurrent SSR requests share a batch.
+  maildirImportPromise ??= ingestMaildirBatch().finally(() => { maildirImportPromise = undefined; });
+  return maildirImportPromise;
+}
+
+async function ingestMaildirBatch(): Promise<void> {
   const maildirFiles = await listMaildirFiles();
   if (maildirFiles.length === 0) return;
 
   const startedAt = Date.now();
   const imported = await readMaildirImportState();
+  const knownIdentities = new Set([...imported].map(canonicalMaildirKey));
   let changed = false;
   let importedCount = 0;
   let skippedCount = 0;
@@ -295,7 +317,17 @@ async function ingestMaildir(): Promise<void> {
   });
 
   for (const { sourcePath, importKey } of maildirFiles) {
-    if (imported.has(importKey)) {
+    const identity = canonicalMaildirKey(importKey);
+    if (knownIdentities.has(identity)) {
+      if (!imported.has(importKey)) {
+        // Keep old entries and add the current raw path for rollback readers.
+        imported.add(importKey);
+        changed = true;
+        auditInfo("mail.import.maildir.alias.success", {
+          actor: "system", method: "IMPORT", path: "maildir", status: "success",
+          sourceIdentity: crypto.createHash("sha256").update(identity).digest("hex")
+        });
+      }
       skippedCount += 1;
       continue;
     }
@@ -352,6 +384,7 @@ async function ingestMaildir(): Promise<void> {
       ]);
 
       imported.add(importKey);
+      knownIdentities.add(identity);
       changed = true;
       importedCount += 1;
       auditInfo("mail.import.maildir.message.success", {

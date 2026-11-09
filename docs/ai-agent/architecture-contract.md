@@ -7,7 +7,7 @@
 사용자 표시는 `MailBox`, 기계 식별자는 `mailbox`, 로컬 checkout 디렉터리는 `mail-box`를 사용한다. `MailBox` TypeScript 타입과 `mailbox-store`처럼 메일함 자체를 뜻하는 기존 도메인 용어는 의미를 유지한다.
 
 ```text
-docker-compose*.yml
+compose.platform.yaml + docker-compose*.yml
   -> smtp-receiver
   -> imap-mailbox
   -> webmail-ui
@@ -47,7 +47,7 @@ SMTP나 IMAP 모듈이 Webmail 내부 파일을 import하거나, Webmail이 Post
 - `MAIL_TLS_DIR`의 서버 인증서·키만 각 서비스에 read-only로 mount한다. CA 개인키는 해당 디렉터리 밖에 보관하며 인증서·키·`.env`는 추적하지 않는다.
 - 운영 HTTPS 프록시만 Webmail을 외부에 노출하며 로그인 cookie는 `Secure`를 사용한다. 개발 HTTP는 loopback 전용이다.
 - 공개 SMTP는 사설망·loopback을 포함한 네트워크 위치로 외부 중계를 허용하지 않는다. `mynetworks`는 loopback으로 고정한다.
-- 앱은 내부 `2587`에 전용 SASL 계정과 필수 STARTTLS로 제출하며 CA·호스트명 검증을 생략하지 않는다. 실패 시 sendmail/평문 fallback은 금지한다.
+- 앱은 내부 `587`(전환 기간 동일 정책의 `2587` 유지)에 전용 SASL 계정과 필수 STARTTLS로 제출하며 CA·호스트명 검증을 생략하지 않는다. 실패 시 sendmail/평문 fallback은 금지한다.
 - MTA 외부 배달은 `smtp_tls_security_level=verify`로 TLS와 MX 호스트 인증서 검증을 요구한다. 지원하지 않는 목적지는 큐에 보류한다.
 - Dovecot SASL 소켓은 `smtp-auth-store`에서 root와 SMTP 전용 GID 1500만 접근한다. 계정 맵 감시기는 UID 5010, capability 0으로 실행한다.
 - Postfix master/virtual의 필요한 root 권한과 일반 작업자의 권한을 구분한다. 잔여 root 권한을 위험 수용 승인으로 간주하지 않는다.
@@ -64,3 +64,7 @@ SMTP나 IMAP 모듈이 Webmail 내부 파일을 import하거나, Webmail이 Post
 - Dovecot 사용자와 Postfix 수신 주소 map은 `mailbox-account-store`에 보존한다.
 - `docker compose down`은 volume을 보존하고 `down -v`만 volume을 제거한다.
 - 생성된 release, packaging script, tracked sprint contract를 저장소에 추가하지 않는다.
+
+## Platform Runtime
+
+운영 Compose 프로젝트는 `platform`, 서비스는 `mailbox-*`다. 네 런타임은 Ubuntu 26.04이며 Webmail과 SMTP는 같은 Ubuntu Node24 base를 `NODE_IMAGE` ARG로 받는다. 실제 다섯 named volume은 external로 보존하고 기존 파일 소유권을 재귀 변경하지 않는다. 표준 내부 포트는 SMTP25/submission587/IMAP143/proxy80·443이다. 기존2525·2587 및 `mailbox_default` 연결과 이전 웹 URL은 소비자 전환을 확인한 뒤 별도 작업으로 정리한다.

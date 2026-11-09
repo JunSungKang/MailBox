@@ -8,12 +8,12 @@
 
 ## Stack
 
-- SMTP: Postfix 3.11 on Alpine stable (Node.js는 비권한 계정 맵 감시기만 실행)
-- IMAP: Dovecot 2.4 on Alpine stable (Maildir 저장 형식은 2.3 호환 유지)
+- SMTP: Ubuntu 26.04 Postfix (배포판 보안 backport 적용) (Node.js는 비권한 계정 맵 감시기만 실행)
+- IMAP: Dovecot 2.4 on Ubuntu 26.04 (Maildir 저장 형식은 2.3 호환 유지)
 - Webmail: Node.js 24, Next.js 16, React 19, TypeScript 6
 - Mail parsing/sending: `mailparser`, `nodemailer`, `busboy`
 - 운영 Webmail HTTPS: Nginx
-- Runtime composition: Docker Compose
+- Runtime composition: Docker Compose (`platform`, `compose.platform.yaml`), Docker Bake
 
 ## Directory Ownership
 
@@ -21,22 +21,25 @@
 - `imap-mailbox`: `dovecot.conf`, IMAP users, container entrypoint.
 - `webmail-ui`: App Router 화면, custom Node server, 메일 파일 저장소와 인증.
 - `docker-compose.yml`: 소스 build 기반 개발 실행.
-- `docker-compose.prod.yml`: 세 모듈 이미지와 HTTPS 프록시를 사용하는 운영 실행.
+- `compose.platform.yaml`: Ubuntu 네 서비스 통합 운영.
+- `docker-bake.hcl`: 공통 Node24 기반과 네 이미지 빌드.
+- `docker-compose.prod.yml`: 이전 실행 구성과 복구 참고.
 - `docs/ai-agent`: agent 작업 규칙.
 - `docs/developer`: 개발자 온보딩과 운영 지식.
 
 ## Commands
 
 ```bash
-cp .env.example .env
+# 새 설치에서만 .env.example로 환경 파일을 준비한다. 기존 .env는 보존한다.
 # 설치 안내에 따라 보안 값과 MAIL_TLS_DIR의 인증서를 준비한다.
-docker compose up -d --build
+docker buildx bake
+docker compose --env-file .env -f compose.platform.yaml config --quiet
 docker compose ps
 npm test --prefix webmail-ui
 npm run build --prefix webmail-ui
 ```
 
-인증서·네트워크 준비와 운영 HTTPS 실행은 [설치 안내](../guides/installation.md)를 따른다. 화면은 밝은 미래 우편함인 “내일의 우편함” 테마를 사용한다.
+실제 교체는 공유 잠금·백업·복구 gate를 포함한 [전환 절차](../guides/ubuntu-platform-transition.md)를 따른다. 인증서·네트워크 준비와 운영 HTTPS 실행은 [설치 안내](../guides/installation.md)를 따른다. 화면은 밝은 미래 우편함인 “내일의 우편함” 테마를 사용한다.
 
 ## Webmail Entry Points
 
@@ -48,3 +51,5 @@ npm run build --prefix webmail-ui
 - `webmail-ui/src/lib/auditLogger.ts`: 구조화 감사 로그.
 
 구조와 데이터 흐름의 상세 내용은 [System Architecture](../architecture/system-architecture.md)를 기준으로 확인한다.
+
+통합 빌드와 전환은 [Ubuntu platform 전환](../guides/ubuntu-platform-transition.md)을 따른다.
