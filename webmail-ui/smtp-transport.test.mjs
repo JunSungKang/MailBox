@@ -9,6 +9,12 @@ import { execFileSync } from "node:child_process";
 import { createSubmissionTransport, submissionOptions, safeSmtpError } from "./smtp-transport.mjs";
 import { ensureSubmissionAccount } from "./smtp-bootstrap.mjs";
 
+test("standard submission defaults to 587 and explicit legacy 2587 remains selectable", () => {
+  const env = { SMTP_HOST: "fixture.test", SMTP_TLS_SERVERNAME: "fixture.test", SMTP_AUTH_USER: "fixture-service", SMTP_AUTH_PASSWORD: "x".repeat(48) };
+  assert.equal(submissionOptions(env).port, 587);
+  assert.equal(submissionOptions({ ...env, SMTP_SUBMISSION_PORT: "2587" }).port, 2587);
+});
+
 test("bootstrap verifies existing long credentials without reapplying signup policy", async () => {
   const env = { SMTP_AUTH_USER: "existing-service", SMTP_AUTH_PASSWORD: "x".repeat(80) };
   let verified = 0;

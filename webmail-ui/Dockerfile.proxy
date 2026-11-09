@@ -1,10 +1,14 @@
-FROM nginx:stable-alpine@sha256:0e52bd054126cdc040b1276c0af347aeb02a41b9cfe305d6094767ac30e97949
-
-RUN apk upgrade --no-cache \
-  && apk add --no-cache 'zlib>=1.4-r0'
+ARG UBUNTU_IMAGE=ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
+FROM ${UBUNTU_IMAGE}
+ENV DEBIAN_FRONTEND=noninteractive
+RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod 0755 /usr/sbin/policy-rc.d \
+ && apt-get update && apt-get dist-upgrade -y \
+ && apt-get install -y --no-install-recommends nginx gettext-base ca-certificates \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' nginx)" ge 1.28.3-2ubuntu1.12 \
+ && rm -rf /var/lib/apt/lists/* \
+ && find /usr -type f -perm /6000 -exec chmod a-s {} +
 COPY nginx.conf.template /etc/nginx/mailbox.conf.template
-
-# Generate only the two operator settings. Preserve nginx request variables.
-# All runtime writes stay in the mounted tmpfs, including the generated config.
+STOPSIGNAL SIGQUIT
+EXPOSE 80 443 8080 8443
 ENTRYPOINT ["/bin/sh", "-ec"]
 CMD ["umask 077; envsubst '${MAIL_WEB_HOSTNAME} ${MAIL_WEB_HTTPS_PORT}' < /etc/nginx/mailbox.conf.template > /tmp/mailbox-nginx.conf; nginx -t -c /tmp/mailbox-nginx.conf; exec nginx -c /tmp/mailbox-nginx.conf -g 'daemon off;'"]

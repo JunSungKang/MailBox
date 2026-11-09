@@ -2,7 +2,7 @@ import fs from "node:fs";
 import nodemailer from "nodemailer";
 
 export function submissionOptions(env = process.env) {
-  const port = Number(env.SMTP_SUBMISSION_PORT || 2587);
+  const port = Number(env.SMTP_SUBMISSION_PORT || 587);
   if (env.SMTP_URL || env.SENDMAIL_PATH) throw new Error("Legacy SMTP_URL/SENDMAIL_PATH is forbidden; configure secure submission");
   if (!env.SMTP_HOST || !env.SMTP_TLS_SERVERNAME || !env.SMTP_AUTH_USER ||
       !env.SMTP_AUTH_PASSWORD || env.SMTP_AUTH_PASSWORD.length < 32 ||

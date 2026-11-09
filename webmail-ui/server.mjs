@@ -709,7 +709,7 @@ await Promise.all([ensureDirs(), ensureAccountFiles()]);
 await accountStore.recover();
 await app.prepare();
 
-http
+const server = http
   .createServer(async (req, res) => {
     const parsedUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
     const pathname = parsedUrl.pathname;
@@ -737,3 +737,30 @@ http
       dataDir: DATA_DIR
     });
   });
+
+
+let stopping = false;
+async function shutdown(signal) {
+  if (stopping) return;
+  stopping = true;
+  const startedAt = Date.now();
+  const context = { requestId: crypto.randomUUID(), actor: "system", method: "SIGNAL", path: "server", signal };
+  auditLog("INFO", "server.shutdown.start", { ...context, status: "draining" });
+  const deadline = setTimeout(() => {
+    auditLog("ERROR", "server.shutdown.timeout", { ...context, status: "failed", durationMs: Date.now() - startedAt });
+    process.exit(1);
+  }, 55_000);
+  try {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await app.close();
+    clearTimeout(deadline);
+    auditLog("INFO", "server.shutdown.success", { ...context, status: "success", durationMs: Date.now() - startedAt });
+    process.exit(0);
+  } catch (error) {
+    clearTimeout(deadline);
+    auditError("server.shutdown.failure", { ...context, status: "failed", error, durationMs: Date.now() - startedAt });
+    process.exit(1);
+  }
+}
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));

@@ -1,5 +1,12 @@
-# Internet receiving and authenticated application submission are distinct.
+# Standard listeners and temporary legacy aliases enforce identical policies.
+25 inet n - n - - smtpd
 2525 inet n - n - - smtpd
+587 inet n - n - - smtpd
+  -o syslog_name=postfix/submission
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_relay_restrictions=check_sasl_access,lmdb:/etc/postfix/submission-authorized,reject
+  -o smtpd_recipient_restrictions=check_sasl_access,lmdb:/etc/postfix/submission-authorized,reject
 2587 inet n - n - - smtpd
   -o syslog_name=postfix/submission
   -o smtpd_tls_security_level=encrypt
