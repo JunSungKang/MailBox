@@ -1,0 +1,13 @@
+# Append after either the standalone or common operations Compose definition.
+# Build unique project-owned tags first; never overwrite common image tags.
+services:
+  mailbox-webmail-ui:
+    image: ${MAILBOX_PERF_WEB_IMAGE:?Set the verified performance web image}
+    stop_grace_period: 60s
+    environment:
+      NODE_OPTIONS: ${WEBMAIL_NODE_OPTIONS:---max-old-space-size=512 --max-semi-space-size=16}
+  mailbox-webmail-proxy:
+    image: ${MAILBOX_PERF_PROXY_IMAGE:?Set the verified performance proxy image}
+    stop_grace_period: 5m
+    environment:
+      NGINX_WORKER_PROCESSES: ${NGINX_WORKER_PROCESSES:-2}

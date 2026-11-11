@@ -54,7 +54,7 @@ test("bootstrap rejects wrong existing credentials even if signup says account e
 
 test("submission requires authenticated, verified TLS without plaintext fallback", async (t) => {
   // Temporary keys stay under the checkout, including on developer machines.
-  const directory = fs.mkdtempSync(path.join(process.cwd(), ".smtp-test-"));
+  const directory = fs.mkdtempSync(path.join(process.env.MAILBOX_TEST_TMP || process.cwd(), ".smtp-test-"));
   const key = path.join(directory, "key.pem");
   const cert = path.join(directory, "cert.pem");
   try {
