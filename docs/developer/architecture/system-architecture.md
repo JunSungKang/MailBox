@@ -77,3 +77,5 @@ webmail signup
 실행 모듈, Compose, 문서만 추적한다. 이미지 빌드나 릴리즈 패키지는 Dockerfile과 Compose에서 재생성하며 저장소 내부에 생성물을 보관하지 않는다. `sprint/` workflow 계약은 로컬 guard 입력으로만 사용하고 Git에는 추적하지 않는다.
 
 운영 통합은 `compose.platform.yaml`의 `platform` 프로젝트가 담당한다. 다섯 실제 volume을 external로 사용하며 API 진단은 loopback20105, 일반 API는 HTTPS20006의 `/api/` 경로를 사용한다. 전환·검증·보안 패키지 판정은 [전환 기록](../guides/ubuntu-platform-transition.md)에 정리한다.
+
+Maildir/drop MIME 첨부는 backpressure를 적용해 stream으로 저장하고 기존 CID 변환과 ledger를 보존한다. 메타데이터 I/O는 요청당32개, Maildir source는4개로 제한한다. Webmail V8 old/semi-space512/16MiB와 proxy2 worker/upstream keepalive8은 [성능 운영 기록](../guides/performance-2026-11-11.md)의 측정 workload에 맞춘 기본값이며 환경변수로 조정한다.

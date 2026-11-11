@@ -82,6 +82,7 @@ services:
     depends_on: [mailbox-smtp-receiver, mailbox-imap-mailbox]
     environment:
       PORT: 3000
+      NODE_OPTIONS: ${WEBMAIL_NODE_OPTIONS:---max-old-space-size=512 --max-semi-space-size=16}
       MAIL_DATA_DIR: /app/data
       MAILDIR_IMPORT_DIR: /mailboxes/mailbox/Maildir
       MAILDIR_IMPORT_PARENT_DIR: /mailboxes
@@ -121,6 +122,7 @@ services:
     environment:
       MAIL_WEB_HOSTNAME: ${MAIL_WEB_HOSTNAME:-mail.ds-mail.p-e.kr}
       MAIL_WEB_HTTPS_PORT: 20006
+      NGINX_WORKER_PROCESSES: ${NGINX_WORKER_PROCESSES:-2}
     ports:
       - "20005:80"
       - "20006:443"

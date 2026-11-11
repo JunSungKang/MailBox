@@ -1,7 +1,8 @@
 import { promises as fs } from "fs";
 import path from "path";
 import crypto from "crypto";
-import { simpleParser } from "mailparser";
+import { parseMailFile } from "./parseMailFile";
+import { boundedMap } from "./boundedMap";
 import { auditError, auditInfo, auditWarn } from "./auditLogger";
 import { textToHtml } from "./text";
 import { canonicalMaildirKey } from "./maildirIdentity";
@@ -101,17 +102,15 @@ export async function listMessages(box: MailBox): Promise<MailMeta[]> {
   }
 
   const entries = await fs.readdir(boxDir(box), { withFileTypes: true });
-  const messages = await Promise.all(
-    entries
-      .filter((entry) => entry.isDirectory())
-      .map(async (entry) => {
+  const messages = await boundedMap(
+    entries.filter((entry) => entry.isDirectory()), 32, async (entry) => {
         try {
           const raw = await fs.readFile(path.join(boxDir(box), entry.name, "meta.json"), "utf8");
           return JSON.parse(raw) as MailMeta;
         } catch {
           return null;
         }
-      })
+      }
   );
 
   return messages
@@ -268,8 +267,8 @@ async function listMaildirSources(): Promise<MaildirSource[]> {
 
 async function listMaildirFiles(): Promise<MaildirFile[]> {
   const sources = await listMaildirSources();
-  const sourceFiles = await Promise.all(
-    sources.map(async (source) => {
+  const sourceFiles = await boundedMap(
+    sources, 4, async (source) => {
       const folders = await Promise.all(
         ["new", "cur"].map(async (folder) => {
           const dir = path.join(source.root, folder);
@@ -287,7 +286,7 @@ async function listMaildirFiles(): Promise<MaildirFile[]> {
         })
       );
       return folders.flat();
-    })
+    }
   );
 
   return sourceFiles.flat();
@@ -332,10 +331,16 @@ async function ingestMaildirBatch(): Promise<void> {
       continue;
     }
 
+    let staging: string | undefined;
+    let unfinished: string | undefined;
     try {
-      const raw = await fs.readFile(sourcePath);
-      const parsed = await simpleParser(raw);
       const messageId = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
+      const stagingPath = path.join(dataDir, "tmp", `import-${messageId}`);
+      await fs.mkdir(stagingPath);
+      staging = stagingPath;
+      let parsed;
+      try { parsed = await parseMailFile(sourcePath, path.join(staging, "attachments")); }
+      catch (error) { await fs.rm(staging, { recursive: true, force: true }); throw error; }
       const targetBox: MailBox = isBounceSource(
         addressText(parsed.from) || headerText(parsed.headers.get("return-path")),
         parsed.subject || "",
@@ -345,21 +350,10 @@ async function ingestMaildirBatch(): Promise<void> {
         ? "bounced"
         : "inbox";
       const dir = messageDir(targetBox, messageId);
-      const attachmentsDir = path.join(dir, "attachments");
-      await fs.mkdir(attachmentsDir, { recursive: true });
-
-      const attachments: AttachmentMeta[] = [];
-      for (const attachment of parsed.attachments) {
-        const attachmentId = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
-        await fs.writeFile(path.join(attachmentsDir, attachmentId), attachment.content);
-        attachments.push({
-          id: attachmentId,
-          filename: attachment.filename || "attachment",
-          contentType: attachment.contentType || "application/octet-stream",
-          size: attachment.size || attachment.content.length,
-          storedName: attachmentId
-        });
-      }
+      await fs.rename(staging, dir);
+      staging = undefined;
+      unfinished = dir;
+      const attachments: AttachmentMeta[] = parsed.attachments;
 
       const toText =
         addressText(parsed.to) ||
@@ -383,6 +377,7 @@ async function ingestMaildirBatch(): Promise<void> {
         fs.writeFile(path.join(dir, "body.html"), bodyHtml)
       ]);
 
+      unfinished = undefined;
       imported.add(importKey);
       knownIdentities.add(identity);
       changed = true;
@@ -395,6 +390,7 @@ async function ingestMaildirBatch(): Promise<void> {
         attachmentCount: attachments.length
       });
     } catch (error) {
+      if (staging || unfinished) await fs.rm((staging || unfinished)!, { recursive: true, force: true });
       failedCount += 1;
       auditError("mail.import.maildir.message.failure", {
         sourcePath,
@@ -454,7 +450,13 @@ async function copyExistingBounces(): Promise<void> {
   }
 }
 
-async function ingestInboxDrop(): Promise<void> {
+let inboxDropPromise: Promise<void> | undefined;
+function ingestInboxDrop(): Promise<void> {
+  inboxDropPromise ??= ingestInboxDropBatch().finally(() => { inboxDropPromise = undefined; });
+  return inboxDropPromise;
+}
+
+async function ingestInboxDropBatch(): Promise<void> {
   const entries = await fs.readdir(dropInboxDir, { withFileTypes: true });
   const files = entries.filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".eml"));
   if (files.length > 0) {
@@ -465,10 +467,16 @@ async function ingestInboxDrop(): Promise<void> {
 
   for (const file of files) {
     const sourcePath = path.join(dropInboxDir, file.name);
+    let staging: string | undefined;
+    let unfinished: string | undefined;
     try {
-      const raw = await fs.readFile(sourcePath);
-      const parsed = await simpleParser(raw);
       const id = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
+      const stagingPath = path.join(dataDir, "tmp", `import-${id}`);
+      await fs.mkdir(stagingPath);
+      staging = stagingPath;
+      let parsed;
+      try { parsed = await parseMailFile(sourcePath, path.join(staging, "attachments")); }
+      catch (error) { await fs.rm(staging, { recursive: true, force: true }); throw error; }
       const targetBox: MailBox = isBounceSource(
         addressText(parsed.from),
         parsed.subject || "",
@@ -478,21 +486,10 @@ async function ingestInboxDrop(): Promise<void> {
         ? "bounced"
         : "inbox";
       const dir = messageDir(targetBox, id);
-      const attachmentsDir = path.join(dir, "attachments");
-      await fs.mkdir(attachmentsDir, { recursive: true });
-
-      const attachments: AttachmentMeta[] = [];
-      for (const attachment of parsed.attachments) {
-        const attachmentId = `${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
-        await fs.writeFile(path.join(attachmentsDir, attachmentId), attachment.content);
-        attachments.push({
-          id: attachmentId,
-          filename: attachment.filename || "attachment",
-          contentType: attachment.contentType || "application/octet-stream",
-          size: attachment.size || attachment.content.length,
-          storedName: attachmentId
-        });
-      }
+      await fs.rename(staging, dir);
+      staging = undefined;
+      unfinished = dir;
+      const attachments: AttachmentMeta[] = parsed.attachments;
 
       const meta: MailMeta = {
         id,
@@ -511,6 +508,7 @@ async function ingestInboxDrop(): Promise<void> {
         fs.writeFile(path.join(dir, "body.html"), textToHtml(bodyText))
       ]);
 
+      unfinished = undefined;
       await fs.rename(sourcePath, path.join(dropProcessedDir, file.name)).catch(async () => {
         await fs.rm(sourcePath, { force: true });
       });
@@ -521,6 +519,7 @@ async function ingestInboxDrop(): Promise<void> {
         attachmentCount: attachments.length
       });
     } catch (error) {
+      if (staging || unfinished) await fs.rm((staging || unfinished)!, { recursive: true, force: true });
       await fs.rename(sourcePath, path.join(dropFailedDir, file.name)).catch(() => {});
       auditError("mail.import.drop.message.failure", {
         sourceFile: file.name,

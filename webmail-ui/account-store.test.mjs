@@ -15,7 +15,7 @@ const password = "synthetic-account-password";
 
 async function fixture(callback) {
   // Test data and credentials stay in the checkout and are always removed.
-  const directory = await fs.mkdtemp(path.join(path.dirname(fileURLToPath(import.meta.url)), ".account-test-"));
+  const directory = await fs.mkdtemp(path.join(process.env.MAILBOX_TEST_TMP || path.dirname(fileURLToPath(import.meta.url)), ".account-test-"));
   const users = path.join(directory, "dovecot-users");
   const recipients = path.join(directory, "virtual-mailbox-accounts");
   const legacy = path.join(directory, "users.json");

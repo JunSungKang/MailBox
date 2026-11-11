@@ -22,6 +22,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV MAIL_DATA_DIR=/app/data
 ENV MAILDIR_IMPORT_DIR=/mailboxes/mailbox/Maildir
+ENV NODE_OPTIONS="--max-old-space-size=512 --max-semi-space-size=16"
 RUN apt-get update && apt-get dist-upgrade -y \
   && apt-get install -y --no-install-recommends util-linux \
   && rm -rf /var/lib/apt/lists/* /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx \
