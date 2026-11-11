@@ -95,7 +95,7 @@ docker compose -p platform -f ../operations/compose.yaml \
 
 2026-11-11 **20:55 KST** 실제 교체와 정상 재시작 검증을 완료했다. 운영 web은 `d07eb68b06db`, proxy는 `5b06a2838125`이며 위 최종 image ID로 실행한다. 두 서비스 모두 restart0, 정상 종료 시험 exit0, OOM 없음이다. Webmail PID1 UID5000/capability0, Nginx master+worker2개를 확인했다.
 
-원래 계정2개·Maildir5통·queue0건·기존 Webmail 파일21개·ledger5항목·소유권/mode150항목과 인증서/CA/서비스 인증값을 보존했다. socket은 root:1500/0660이다. 다섯 volume 이름과 원래 mount·network·port를 유지했다. SMTP/IMAP2개와 다른 프로젝트12개는 ID/image/StartedAt/running이 동일하다. 실제 `damgox2-worker`의 같은 JVM image/network namespace와 read-only CA/자격 파일로 기존587 TLS/hostname/AUTH 후 QUIT를 검증했다. 이 probe는 MAIL/RCPT/DATA를 보내지 않는다.
+원래 계정2개·Maildir5통·queue0건·기존 Webmail 파일21개·ledger5항목·소유권/mode150항목과 인증서/CA/서비스 인증값을 보존했다. socket은 root:1500/0660이다. 다섯 volume 이름과 원래 mount·network·port를 유지했다. SMTP/IMAP2개와 다른 프로젝트12개는 ID/image/StartedAt/running이 동일하다. 실제 `damgox2-worker`의 같은 JVM image/network namespace와 read-only CA/자격 파일로 기존2587 TLS/hostname/AUTH 후 QUIT를 검증했다. 이 probe는 MAIL/RCPT/DATA를 보내지 않는다.
 
 공유 잠금 inode25825009를 교체·검증·재시작까지 보유했다. 처음 시도의 마지막 `docker top` 형식 호환성 오류 때에는 자동으로 이전 이미지와 구성을 복구했고, 확인 방식을 `/proc`으로 보완한 재시도가 모두 통과했다. raw 감사 이력은 `deploy-audit.jsonl`에 보존한다.
 
