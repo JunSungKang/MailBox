@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { modules, imageName, manifest, architecture, assertCurrentMain } from "./registry.mjs";
+import { modules, imageName, manifest, architecture, assertCurrentMain, visibleManifest, waitForRegistry } from "./registry.mjs";
 import { planImmutableTags, assemblyArguments } from "./promotion.mjs";
 const root = fs.realpathSync(process.cwd()), directory = fs.realpathSync(process.env.CHECK_DIR);
 assert(directory.startsWith(root + path.sep)); await assertCurrentMain();
@@ -33,9 +33,9 @@ for (const module of modules) {
       [full + ":build-" + process.env.GITHUB_RUN_ID + "-amd64", full + ":build-" + process.env.GITHUB_RUN_ID + "-arm64"];
     execFileSync("docker", assemblyArguments(full, plan.missing, sources), { stdio: "inherit" });
   }
-  const combined = await manifest(name, "sha-" + sha); assert(combined.data.manifests);
-  for (const arch of ["amd64", "arm64"]) assert.equal((await architecture(name, "sha-" + sha, arch, sha, version)).digest, expected[module][arch].digest);
-  assert.equal((await manifest(name, "v" + version)).digest, combined.digest);
+  const combined = await visibleManifest(name, "sha-" + sha); assert(combined.data.manifests);
+  for (const arch of ["amd64", "arm64"]) assert.equal((await waitForRegistry(() => architecture(name, "sha-" + sha, arch, sha, version))).digest, expected[module][arch].digest);
+  assert.equal((await visibleManifest(name, "v" + version, combined.digest)).digest, combined.digest);
   for (const [tag, digest] of Object.entries(plan.preserved)) assert.equal((await manifest(name, tag)).digest, digest, "Existing immutable index changed");
   images.push({ image: full, digest: combined.digest, version, revision: sha, architectures: ["amd64", "arm64"] });
 }
@@ -43,7 +43,7 @@ for (const module of modules) {
 for (const image of images) {
   await assertCurrentMain();
   execFileSync("docker", ["buildx", "imagetools", "create", "--prefer-index=true", "--tag", image.image + ":latest", image.image + "@" + image.digest], { stdio: "inherit" });
-  assert.equal((await manifest(image.image.slice("ghcr.io/".length), "latest")).digest, image.digest);
+  assert.equal((await visibleManifest(image.image.slice("ghcr.io/".length), "latest", image.digest)).digest, image.digest);
 }
 fs.mkdirSync(directory + "/reports", { recursive: true, mode: 0o700 });
 fs.writeFileSync(directory + "/reports/published.json", JSON.stringify({ status: "success", revision: sha, version, images }, null, 2) + "\n", { mode: 0o600 });

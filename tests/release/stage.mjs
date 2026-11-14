@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { modules, imageName, architecture, assertCurrentMain } from "./registry.mjs";
+import { modules, imageName, architecture, assertCurrentMain, waitForRegistry } from "./registry.mjs";
 const root = fs.realpathSync(process.cwd()), directory = fs.realpathSync(process.env.CHECK_DIR);
 assert(directory.startsWith(root + path.sep));
 await assertCurrentMain();
@@ -19,7 +19,7 @@ for (const module of modules) {
   await assertCurrentMain();
   execFileSync("docker", ["image", "tag", image.imageId, target], { stdio: "pipe" });
   execFileSync("docker", ["image", "push", target], { stdio: "inherit" });
-  staged.push({ module, target, ...await architecture(name, tag, arch, process.env.GITHUB_SHA, images.version) });
+  staged.push({ module, target, ...await waitForRegistry(() => architecture(name, tag, arch, process.env.GITHUB_SHA, images.version)) });
 }
 fs.writeFileSync(directory + "/reports/staged.json", JSON.stringify({ status: "success", revision: images.revision, images: staged }, null, 2) + "\n", { mode: 0o600 });
 console.log(JSON.stringify({ time: new Date().toISOString(), level: "INFO", event: "release.images.staged", actor: process.env.GITHUB_ACTOR, status: "success", architecture: arch, count: staged.length }));
