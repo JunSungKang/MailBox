@@ -3,7 +3,7 @@
 **Self-hosted SMTP, IMAP and webmail with persistent Maildir storage.**
 
 [![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.0-green.svg)](VERSION)
+[![Version](https://img.shields.io/badge/version-0.2.1-green.svg)](VERSION)
 [![Containers](https://github.com/JunSungKang/MailBox/actions/workflows/publish-containers.yml/badge.svg?branch=main)](https://github.com/JunSungKang/MailBox/actions/workflows/publish-containers.yml)
 
 MailBox는 Postfix, Dovecot, Next.js 웹메일을 Docker로 구성한 단일 호스트용 메일 서버입니다. 웹에서 계정을 만들고 편지를 읽거나 보내며, IMAP 클라이언트로 같은 원본 메일함에 접속할 수 있습니다.
@@ -43,13 +43,13 @@ MailBox는 Postfix, Dovecot, Next.js 웹메일을 Docker로 구성한 단일 호
 
 ## Container packages
 
-레지스트리 호환성을 위해 기존 `mail-server-*` 이름과 `v0.1.x` 태그를 유지합니다. `v0.2.0`은 Ubuntu 전환·메모리 최적화·코드 없는 가입·계정 경계 보호를 포함합니다. 기존 버전에서 전환할 때는 [데이터·UID/GID·TLS·복구 절차](docs/developer/guides/ubuntu-platform-transition.md)를 먼저 확인하세요.
+레지스트리 호환성을 위해 기존 `mail-server-*` 이름과 `v0.1.x`·`v0.2.0` 태그를 유지합니다. 현재 패치 릴리스는 `v0.2.1`이며, `latest`만 새 릴리스를 가리키도록 이동합니다. 버전 태그와 `sha-<전체 SHA>` 태그는 기존 digest를 보존하므로 특정 버전 사용과 복구에는 이 태그나 digest를 지정하세요. `v0.2.0`은 Ubuntu 전환·메모리 최적화·코드 없는 가입·계정 경계 보호를 포함합니다. 기존 버전에서 전환할 때는 [데이터·UID/GID·TLS·복구 절차](docs/developer/guides/ubuntu-platform-transition.md)를 먼저 확인하세요.
 
 | 서비스 | 이미지 | 패키지 |
 | --- | --- | --- |
-| SMTP | `ghcr.io/junsungkang/mail-server-smtp-receiver:v0.2.0` | [Versions](https://github.com/users/JunSungKang/packages/container/package/mail-server-smtp-receiver) |
-| IMAP | `ghcr.io/junsungkang/mail-server-imap-mailbox:v0.2.0` | [Versions](https://github.com/users/JunSungKang/packages/container/package/mail-server-imap-mailbox) |
-| 웹메일 | `ghcr.io/junsungkang/mail-server-webmail-ui:v0.2.0` | [Versions](https://github.com/users/JunSungKang/packages/container/package/mail-server-webmail-ui) |
+| SMTP | `ghcr.io/junsungkang/mail-server-smtp-receiver:v0.2.1` | [Versions](https://github.com/users/JunSungKang/packages/container/package/mail-server-smtp-receiver) |
+| IMAP | `ghcr.io/junsungkang/mail-server-imap-mailbox:v0.2.1` | [Versions](https://github.com/users/JunSungKang/packages/container/package/mail-server-imap-mailbox) |
+| 웹메일 | `ghcr.io/junsungkang/mail-server-webmail-ui:v0.2.1` | [Versions](https://github.com/users/JunSungKang/packages/container/package/mail-server-webmail-ui) |
 
 릴리스는 `linux/amd64`·`linux/arm64`를 제공합니다. `latest`는 검증된 main 릴리스, `sha-<전체 커밋 SHA>`는 해당 소스 버전입니다. 운영에서는 버전 또는 digest를 고정해 사용하세요. 실제 게시 상태와 digest는 workflow 결과에서 확인합니다. [빌드·검증·게시 안내](docs/developer/guides/container-packages.md)를 참고하세요.
 
