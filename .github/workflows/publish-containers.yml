@@ -1,0 +1,123 @@
+name: Publish containers
+
+on:
+  push:
+    branches: [main]
+    paths: [VERSION, .github/workflows/publish-containers.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mailbox-container-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'JunSungKang/MailBox' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TAG: ci-${{ github.sha }}
+      SOURCE_REVISION: ${{ github.sha }}
+      EXPECTED_ARCHITECTURE: ${{ matrix.arch }}
+      CHECK_DIR: ${{ github.workspace }}/.agents/package-${{ matrix.arch }}
+      DOCKER_CONFIG: ${{ github.workspace }}/.agents/docker-${{ matrix.arch }}
+      BUILDX_CONFIG: ${{ github.workspace }}/.agents/buildx-${{ matrix.arch }}
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Prepare workspace-only artifacts
+        run: mkdir -p "$CHECK_DIR/reports" "$DOCKER_CONFIG" "$BUILDX_CONFIG"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: v0.39.0
+      - name: Validate source metadata
+        run: |
+          node tests/release/check.mjs
+          node --test tests/release/registry.test.mjs tests/release/promotion.test.mjs
+      - name: Build native images with the common Ubuntu Node24 base
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          export VERSION="$(cat VERSION)"
+          docker buildx bake -f docker-bake.hcl --set "*.platform=$PLATFORM" smtp imap webmail
+      - name: Verify exact images, unit tests and isolated mail fixture
+        run: |
+          node tests/release/check.mjs --images
+          node tests/release/unit.mjs
+          node tests/release/smoke.mjs
+          node tests/release/scan.mjs
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Stage tested architecture images
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tests/release/stage.mjs
+      - name: Retain validation reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-reports-${{ matrix.arch }}
+          path: ${{ env.CHECK_DIR }}/reports/
+          include-hidden-files: true
+          retention-days: 14
+
+  publish:
+    needs: build
+    if: github.repository == 'JunSungKang/MailBox' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    env:
+      CHECK_DIR: ${{ github.workspace }}/.agents/package-publish
+      DOCKER_CONFIG: ${{ github.workspace }}/.agents/docker-publish
+      BUILDX_CONFIG: ${{ github.workspace }}/.agents/buildx-publish
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: mkdir -p "$CHECK_DIR/reports" "$DOCKER_CONFIG" "$BUILDX_CONFIG"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: v0.39.0
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify both architectures, publish immutable versions, then latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tests/release/promote.mjs
+      - name: Retain published manifest digests
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-publication
+          path: ${{ env.CHECK_DIR }}/reports/
+          include-hidden-files: true
+          retention-days: 14

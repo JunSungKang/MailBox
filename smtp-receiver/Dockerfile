@@ -1,5 +1,12 @@
 ARG NODE_IMAGE=mailbox-node24:ubuntu26.04
 FROM ${NODE_IMAGE}
+ARG SOURCE_REVISION=unknown
+ARG MAILBOX_VERSION=0.2.0
+LABEL org.opencontainers.image.source="https://github.com/JunSungKang/MailBox" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.version="${MAILBOX_VERSION}"
+COPY --from=license_files /LICENSE /NOTICE /usr/share/doc/mailbox/
 ENV DEBIAN_FRONTEND=noninteractive
 # Preserve persisted Postfix UID/GID and postdrop GID from the existing spool.
 RUN groupadd -g 1500 postfix && useradd -r -u 100 -g postfix -d /var/spool/postfix -s /usr/sbin/nologin postfix \

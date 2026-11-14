@@ -8,6 +8,8 @@ FROM deps AS production-deps
 RUN npm prune --omit=dev
 
 FROM ${NODE_IMAGE} AS builder
+ARG SOURCE_REVISION=unknown
+ENV MAILBOX_SOURCE_REVISION=${SOURCE_REVISION}
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV MAILDIR_IMPORT_DIR=/mailboxes/mailbox/Maildir
@@ -16,6 +18,14 @@ COPY . .
 RUN npm run build
 
 FROM ${NODE_IMAGE} AS runner
+ARG SOURCE_REVISION=unknown
+ARG MAILBOX_VERSION=0.2.0
+LABEL org.opencontainers.image.source="https://github.com/JunSungKang/MailBox" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.version="${MAILBOX_VERSION}"
+COPY --from=license_files /LICENSE /NOTICE /usr/share/doc/mailbox/
+ENV MAILBOX_SOURCE_REVISION=${SOURCE_REVISION}
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

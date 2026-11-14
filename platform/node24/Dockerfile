@@ -13,3 +13,4 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
  && node -e 'if(process.versions.node.split(".")[0]!=="24"||typeof require("node:crypto").argon2!=="function")process.exit(1)' \
  && test "$(. /etc/os-release; echo "$VERSION_ID")" = 26.04
+COPY --from=node-dist /usr/local/LICENSE /usr/share/doc/nodejs/LICENSE

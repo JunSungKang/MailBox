@@ -71,12 +71,13 @@ docker compose -f compose.platform.yaml restart mailbox-webmail-proxy
 
 ## 이미지 빌드 및 Push
 
-각 모듈은 자신의 Dockerfile로 독립 빌드한다.
+각 모듈은 자신의 Dockerfile과 `license_files` context로 빌드한다. 공통 Node base와 라이선스 context를 함께 준비하는 Bake 경로를 사용한다. 공개 배포는 커밋한 소스의 revision을 지정한다.
 
 ```bash
-docker build -t <registry>/mailbox-webmail-ui:<release_tag> webmail-ui
-docker push <registry>/mailbox-webmail-ui:<release_tag>
+SOURCE_REVISION="$(git rev-parse HEAD)" TAG=local-check docker buildx bake -f docker-bake.hcl webmail
 ```
+
+직접 빌드한다면 루트에서 `--build-context license_files=.`를 전달한다. 공식 GHCR 게시·native 검증·버전/SHA/latest 태그 관리와 권한은 [패키지 게시 안내](container-packages.md)의 reviewed main workflow를 따른다.
 
 ## 계정과 수신 주소 관리
 

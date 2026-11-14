@@ -16,6 +16,7 @@ services:
     image: mailbox-smtp-receiver:${MAILBOX_IMAGE_TAG:-ubuntu26.04}
     build:
       context: ./smtp-receiver
+      additional_contexts: {license_files: .}
       args: *mailbox-node-build
     container_name: mailbox-smtp-receiver
     restart: unless-stopped
@@ -52,7 +53,9 @@ services:
 
   mailbox-imap-mailbox:
     image: mailbox-imap-mailbox:${MAILBOX_IMAGE_TAG:-ubuntu26.04}
-    build: {context: ./imap-mailbox}
+    build:
+      context: ./imap-mailbox
+      additional_contexts: {license_files: .}
     container_name: mailbox-imap-mailbox
     restart: unless-stopped
     stop_grace_period: 30s
@@ -74,6 +77,7 @@ services:
     image: mailbox-webmail-ui:${MAILBOX_IMAGE_TAG:-ubuntu26.04}
     build:
       context: ./webmail-ui
+      additional_contexts: {license_files: .}
       args: *mailbox-node-build
     container_name: mailbox-webmail-ui
     restart: unless-stopped
@@ -112,7 +116,10 @@ services:
 
   mailbox-webmail-proxy:
     image: mailbox-webmail-proxy:${MAILBOX_IMAGE_TAG:-ubuntu26.04}
-    build: {context: ./webmail-ui, dockerfile: Dockerfile.proxy}
+    build:
+      context: ./webmail-ui
+      dockerfile: Dockerfile.proxy
+      additional_contexts: {license_files: .}
     container_name: mailbox-webmail-proxy
     restart: unless-stopped
     stop_grace_period: 5m

@@ -5,6 +5,7 @@ services:
     image: mailbox-smtp-receiver:dev
     build:
       context: ./smtp-receiver
+      additional_contexts: {license_files: .}
     container_name: mailbox-smtp-receiver
     restart: unless-stopped
     environment:
@@ -32,6 +33,7 @@ services:
     image: mailbox-imap-mailbox:dev
     build:
       context: ./imap-mailbox
+      additional_contexts: {license_files: .}
     container_name: mailbox-imap-mailbox
     restart: unless-stopped
     depends_on:
@@ -53,6 +55,7 @@ services:
     image: mailbox-webmail-ui:dev
     build:
       context: ./webmail-ui
+      additional_contexts: {license_files: .}
     container_name: mailbox-webmail-ui
     restart: unless-stopped
     depends_on:
