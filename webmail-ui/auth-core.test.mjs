@@ -1,9 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isValidPassword, isValidUserId, sessionToken, verifySessionToken } from "./auth-core.mjs";
+import { isValidPassword, isValidUserId, mayProvisionServiceAccount, sessionToken, verifySessionToken } from "./auth-core.mjs";
 
 const secret = "test-secret-at-least-32-characters-long";
+
+test("service provisioning requires the real loopback peer and configured credential", () => {
+  const password = "s".repeat(48);
+  for (const peer of ["127.0.0.1", "::1", "::ffff:127.0.0.1"]) {
+    assert.equal(mayProvisionServiceAccount(peer, password, password), true);
+    assert.equal(mayProvisionServiceAccount(peer, "wrong-service-password", password), false);
+    assert.equal(mayProvisionServiceAccount(peer, "가".repeat(48), password), false);
+  }
+  for (const peer of ["192.168.48.2", "172.25.0.2", "203.0.113.2", undefined]) {
+    assert.equal(mayProvisionServiceAccount(peer, password, password), false);
+  }
+  assert.equal(mayProvisionServiceAccount("127.0.0.1", undefined, password), false);
+  assert.equal(mayProvisionServiceAccount("127.0.0.1", "short", "short"), false);
+});
 
 test("accepts a valid signed session", () => {
   assert.equal(verifySessionToken(sessionToken("jskang", secret), secret), "jskang");

@@ -109,4 +109,6 @@ IMAP 이미지는 Ubuntu 26.04의 보안 수정 Dovecot 2.4를 사용한다. 2.3
 
 통합 Ubuntu 이미지의 빌드·공유 잠금·실제 볼륨·호환 endpoint·복구 절차는 [Ubuntu platform 전환](ubuntu-platform-transition.md)을 따른다. 이전 `docker-compose*.yml`은 이전 commit과 이미지로 복구할 때의 구성이다.
 
+공개 가입에서 서비스 ID 거부는 `auth.signup.reserved_id`, 기존 계정/recipient 충돌은 `auth.signup.exists` WARN으로 기록한다.
+
 가입 코드 없는 공개 회원가입의 검증·실제 공통 edge 운영 반영·복구는 [2026-11-15 운영 기록](open-signup-2026-11-15.md)을 따른다.

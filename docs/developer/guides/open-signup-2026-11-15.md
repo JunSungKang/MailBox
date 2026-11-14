@@ -1,30 +1,32 @@
 # 가입 코드 없는 회원가입 전환
 
-2026-11-15부터 회원가입은 사용자 ID와 비밀번호로 공개 제공한다. 가입 화면의 코드 입력란, 서버의 코드 비교와 시작 시 코드 필수 검사를 제거했다. 신규 비밀번호는 기존과 같이 8~128자이고 NUL 문자는 사용할 수 없다. 기존 ID의 중복 가입, 이전 `users.json` 계정의 원래 비밀번호 확인, 계정 파일의 잠금·원자적 갱신·복구 journal은 유지한다. 가입·로그인 성공과 실패는 기존 JSON Lines 감사 이벤트로 기록하며 비밀번호와 세션 값은 기록하지 않는다.
+2026-11-15부터 회원가입은 사용자 ID와 비밀번호로 공개 제공한다. 가입 화면의 코드 입력란, 서버의 코드 비교와 시작 시 코드 필수 검사를 제거했다. 신규 비밀번호는 기존과 같이 8~128자이고 NUL 문자는 사용할 수 없다. SMTP 서비스용 ID와 기존 recipient local-part는 공개 가입에서 예약한다. 서비스 ID는 실제 loopback 연결과 설정된 서비스 비밀번호를 모두 증명한 내부 bootstrap만 생성할 수 있다. 전달 헤더는 이 권한을 주지 않는다. 원래 비밀번호를 증명한 이전 계정의 shared Maildir 경로 이전은 계속 허용한다. 기존 ID의 중복 가입, 이전 `users.json` 계정의 원래 비밀번호 확인, 계정 파일의 잠금·원자적 갱신·복구 journal은 유지한다. 가입·로그인 성공과 실패 및 서비스 ID 거부는 JSON Lines 감사 이벤트로 기록하며 비밀번호와 세션 값은 기록하지 않는다.
 
 세 Compose 정의와 `.env.example`, SMTP 계정 bootstrap에서 `WEBMAIL_SIGNUP_TOKEN` 의존성을 제거했다. 기존 환경 파일에 이 값이 남아 있어도 새 코드에서는 사용하지 않는다. `WEBMAIL_SESSION_SECRET`, SMTP 서비스 자격, TLS/CA 검증, `Secure`·`HttpOnly`·`SameSite=Lax` cookie는 그대로 사용한다. 기존 계정과 비밀번호 hash를 변환하거나 재설정하지 않는다.
 
 ## 검증
 
-- Ubuntu 26.04.1 / Node 24.22.2 최종 이미지의 production Next build와 단위 테스트47개 통과.
-- 네트워크 `none`과 전용 synthetic account/data 볼륨에서 가입 검사28개와 정상 종료·재시작 후18개 통과. 운영 데이터는 mount하지 않았다.
+- Ubuntu 26.04.1 / Node 24.22.2 최종 이미지의 production Next build와 단위 테스트49개 통과.
+- 전용 `internal` 네트워크와 synthetic account/data 볼륨에서 가입 검사37개와 정상 종료·재시작 후22개 통과. 운영 데이터는 mount하지 않았다. 별도 컨테이너 peer가 정확한 서비스 비밀번호와 위조된 loopback 전달 헤더를 보내도 서비스 계정 생성 전에 거부되는 것을 추가 확인했다. alias·자신의 경로를 가진 orphan·과거 domain 주소 선점 거부와 내부 bootstrap, 원래 비밀번호로 증명한 legacy 경로 이전도 확인했다.
 - 코드 환경변수와 form field가 없는 상태에서 가입, 8자·128자 한글 비밀번호, 로그인, 잘못된 비밀번호·길이·NUL·ID 거부, 중복 가입에 의한 hash 변경 거부, 기존 ID 탈취 거부, 기존 비밀번호를 증명한 이전 계정 전환, `Secure` 서명 세션을 확인했다.
 - 가입·로그인 성공/실패 감사 이벤트와 테스트 자격의 로그 미포함을 확인했다. 검사 helper가 stdout만 읽어 WARN 이벤트를 놓친 첫 시도는 stdout/stderr를 함께 수집해 재검증했다. 애플리케이션 수정은 추가하지 않았다.
 - 세 Compose를 코드 환경변수 없이 해석했다. `tests/platform/signup-check.mjs`는 fixture 전용 gate와 domain 검사를 통과한 격리 환경에서만 실행한다.
 - 최종 이미지 archive→manifest→config digest와 Trivy 검사 결과를 대조했다. Trivy0.76.2의 DB는2026-11-15 04:00 KST 갱신판이며 HIGH0/CRITICAL0이다. 남은 원시 행은 MEDIUM17/LOW4/UNKNOWN1, 고유 CVE12개다.22행 중21행에는 수정 버전이 제시되지 않았다. 남은 항목을 해결된 것으로 취급하지 않는다.
-- 격리 컨테이너1개·전용 볼륨2개·테스트 환경 파일을 제거했다. 외부 실제 수신자에게 시험 메일을 보내지 않았다.
+- 격리 웹 컨테이너1개와 일회성 peer probe·전용 볼륨2개·내부 네트워크1개·테스트 환경 파일을 제거했다. 외부 실제 수신자에게 시험 메일을 보내지 않았다.
+
+첫 반영 후 독립 검토에서 신규 SMTP 서비스 ID와 기존 recipient alias 선점 경계가 확인됐다. 이전 이미지로 잠금 아래 복구해 가입 제한을 일시 복원하고, 위 예약 정책과 추가 회귀 검증을 적용한 r2를 다시 검증·반영했다. 복구와 최종 교체 모두 계정2개·메일5통과 원래 경로·파일을 보존했다.
 
 ## 실제 운영 반영
 
-2026-11-15 **05:17 KST** 운영 교체와 정상 재시작 검증을 완료했다. Docker Desktop `desktop-linux`의 실제 socket과 `linux/arm64`를 사용했다. 프로젝트 전용 기존 Ubuntu Node24 base를 `NODE_IMAGE=mailbox-node24:ubuntu26.04-20261109-r3`로 받아 새 웹메일 이미지를 빌드했다. 공통 이미지 tag를 덮어쓰지 않았다.
+2026-11-15 **05:32 KST** 운영 교체와 정상 재시작 검증을 완료했다. Docker Desktop `desktop-linux`의 실제 socket과 `linux/arm64`를 사용했다. 프로젝트 전용 기존 Ubuntu Node24 base를 `NODE_IMAGE=mailbox-node24:ubuntu26.04-20261109-r3`로 받아 새 웹메일 이미지를 빌드했다. 공통 이미지 tag를 덮어쓰지 않았다.
 
 | 항목 | 실제 값 |
 | --- | --- |
 | Compose 프로젝트 / 서비스 | `platform` / `mailbox-webmail-ui` |
-| 컨테이너 | `mailbox-web` (`9fa187b35cc1`) |
-| 이미지 tag | `mailbox-webmail-ui:open-signup-20261115-r1` |
-| 이미지 ID | `sha256:ed89cbe7f6879f66cb2a62645fecd41d7453102125ba8a40ae48c44f39df78ad` |
-| 이미지 config digest | `sha256:3622d195f559cbe634a4b376c15d1a87fbbd41db04b0c3dc6e735f846922660e` |
+| 컨테이너 | `mailbox-web` (`c5034bd2bc5d`) |
+| 이미지 tag | `mailbox-webmail-ui:open-signup-20261115-r2` |
+| 이미지 ID | `sha256:fa092416f9a94fe971a146337a1caa837116be7fb95bbcabe7e3b5174d88614f` |
+| 이미지 config digest | `sha256:6e51fc2163486b7fc26049a762e3dd31ad503cb96b55dc2eee6ea7f11877cb74` |
 | 실제 HTTPS | `https://175.195.62.165:20005` |
 | 기존 HTTPS 별칭 | `20006`에서 HTTPS20005로 이동 |
 | 진단 endpoint | `127.0.0.1:20105 -> 3000` |
@@ -42,7 +44,7 @@
 
 보호 자료는 ignored `.agents/open-signup-20261115/` 아래에 보존한다(directory0700, 비밀 파일0600). `backups/original-web.inspect.json`, `backups/runtime-before.compose.json`, `backups/runtime-open-signup.compose.json`에는 실제 자격·환경값이 포함되므로 Git/PR/로그에 붙이지 않는다. 설정에는 현재 웹메일 서비스만 포함하며 원래 네트워크와 볼륨은 external로 참조한다. Compose 문자열의 `$`는 literal로 보존해 실제 환경값이 변하지 않도록 했다.
 
-정상 종료한 웹메일이 유일한 계정/cache writer인 상태에서 `backups/volumes-2026-11-14T20-16-13-846Z/`에 `mailbox-account-store`와 `webmail-data-store`의 일관된 tar 백업을 만들고 hash·tar header를 검증했다. Maildir·queue·인증 소켓은 SMTP/IMAP이 계속 사용하므로 정적인 전체5볼륨 백업이라고 주장하지 않는다. 백업 내역과 SHA256은 `reports/backup-inventory.json`을 확인한다.
+정상 종료한 웹메일이 유일한 계정/cache writer인 상태에서 `backups/volumes-2026-11-14T20-31-25-475Z/`에 `mailbox-account-store`와 `webmail-data-store`의 일관된 tar 백업을 만들고 hash·tar header를 검증했다. Maildir·queue·인증 소켓은 SMTP/IMAP이 계속 사용하므로 정적인 전체5볼륨 백업이라고 주장하지 않는다. 백업 내역과 SHA256은 `reports/backup-inventory.json`을 확인한다.
 
 공통 운영의 다음 recreate 때도 새 웹메일 이미지와 원래 mount·환경·네트워크·포트를 사용해야 한다. 이 작업은 공통 `operations/edge/runtime.compose.json`을 수정하지 않았으므로 공통 파일의 이전 image로 recreate하면 이전 코드로 돌아갈 수 있다. 새 내부 endpoint는 기존 `mailbox-web:3000`이며 client endpoint는 변경하지 않았다. 현재 운영 재현용 모델은 `backups/runtime-open-signup.compose.json`, 해당 Compose의 환경 파일은 `backups/empty.env`다. 프로젝트명 `platform`에서 `--no-deps --no-build --pull never`와 서비스 `mailbox-webmail-ui`만 선택한다.
 

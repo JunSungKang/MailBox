@@ -84,17 +84,17 @@ export function createAccountStore({ directory, legacyUsersPath, domains, onReco
   }
 
   async function verifyLegacyOwnership(userId, password) {
-    if (!legacyUsersPath) return;
+    if (!legacyUsersPath) return false;
     const raw = await io.readFile(legacyUsersPath, "utf8").catch((error) => {
       if (error?.code === "ENOENT") return null;
       throw error;
     });
-    if (raw === null) return;
+    if (raw === null) return false;
     let users;
     try { users = JSON.parse(raw); } catch { throw new Error("Invalid legacy account store"); }
     if (!Array.isArray(users)) throw new Error("Invalid legacy account store");
     const reserved = users.filter((user) => typeof user?.id === "string" && normalizeUserId(user.id) === userId);
-    if (!reserved.length) return;
+    if (!reserved.length) return false;
     // Public signup must still prove ownership of an existing legacy account.
     if (reserved.length !== 1 || typeof reserved[0].salt !== "string" || typeof reserved[0].passwordHash !== "string") {
       throw accountExists();
@@ -104,6 +104,7 @@ export function createAccountStore({ directory, legacyUsersPath, domains, onReco
     if (derived.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(derived), Buffer.from(expected))) {
       throw accountExists();
     }
+    return true;
   }
 
   async function reconcileRecipients() {
@@ -136,7 +137,14 @@ export function createAccountStore({ directory, legacyUsersPath, domains, onReco
         await recoverPending();
         const before = await readAccounts();
         if (parseDovecotUsers(before.dovecot).some((account) => account.id === userId)) throw accountExists();
-        await verifyLegacyOwnership(userId, password);
+        const ownsLegacyAccount = await verifyLegacyOwnership(userId, password);
+        const hasExistingRecipient = before.postfix.split(/\r?\n/).some((line) => {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#")) return false;
+          const [address] = trimmed.split(/\s+/, 1);
+          return address.includes("@") && address.slice(0, address.indexOf("@")).toLowerCase() === userId;
+        });
+        if (hasExistingRecipient && !ownsLegacyAccount) throw accountExists();
         const passwordHash = await hashPassword(password);
         const after = {
           dovecot: mergeDovecotUser(before.dovecot, userId, passwordHash),

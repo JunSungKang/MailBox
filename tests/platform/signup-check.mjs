@@ -38,6 +38,13 @@ if (!restart) {
   check("legacy ID cannot be claimed with a new password", rejected(await post("signup", "legacy-owner", crypto.randomBytes(32).toString("base64url")), "/signup?error=exists"));
   check("failed legacy ownership check leaves account files unchanged", fs.readFileSync(usersPath, "utf8") === initialUsers &&
     fs.readFileSync(recipientsPath, "utf8") === initialRecipients);
+  for (const id of [process.env.SMTP_AUTH_USER, "routed-alias", "orphan-alias", "historical-alias"]) {
+    check("reserved service/recipient ID cannot be claimed", rejected(await post("signup", id, "untrusted-fixture-password"), "/signup?error=exists"));
+  }
+  check("reserved-ID rejection leaves accounts and routing unchanged", fs.readFileSync(usersPath, "utf8") === initialUsers &&
+    fs.readFileSync(recipientsPath, "utf8") === initialRecipients);
+  const bootstrap = await post("signup", process.env.SMTP_AUTH_USER, process.env.SMTP_AUTH_PASSWORD);
+  check("true-loopback bootstrap can provision the configured service credential", bootstrap.status === 303 && bootstrap.headers.get("location") === "/inbox");
   for (const [id, password] of [["public-eight", "a".repeat(8)], ["public-unicode", "가".repeat(128)], ["legacy-owner", process.env.FIXTURE_LEGACY_PASSWORD]]) {
     const signup = await post("signup", id, password);
     const cookie = signup.headers.get("set-cookie") || "";
@@ -47,7 +54,8 @@ if (!restart) {
   }
 }
 for (const [id, password] of [["public-eight", "a".repeat(8)], ["public-unicode", "가".repeat(128)],
-  ["legacy-owner", process.env.FIXTURE_LEGACY_PASSWORD], ["existing-owner", process.env.FIXTURE_EXISTING_PASSWORD]]) {
+  ["legacy-owner", process.env.FIXTURE_LEGACY_PASSWORD], ["existing-owner", process.env.FIXTURE_EXISTING_PASSWORD],
+  [process.env.SMTP_AUTH_USER, process.env.SMTP_AUTH_PASSWORD]]) {
   check("full-password login works" + (restart ? " after restart" : ""), (await post("login", id, password)).headers.get("location") === "/inbox");
   check("wrong password remains rejected", rejected(await post("login", id, password.slice(0, -1) + (password.endsWith("Z") ? "Y" : "Z")), "/login?error=invalid_credentials"));
 }
@@ -60,6 +68,9 @@ for (const line of initialUsers.split("\n").filter(line => line && !line.startsW
   check("pre-existing account hash is preserved", beforeDuplicate.split("\n").includes(line));
 }
 check("legacy source remains unchanged", fs.readFileSync("/app/data/users.json", "utf8") === legacy);
+check("reserved alias routes remain with the original owners", ["routed-alias@signup.fixture.invalid old-owner/Maildir/",
+  "orphan-alias@signup.fixture.invalid orphan-alias/Maildir/", "historical-alias@historical.invalid shared/Maildir/"]
+  .every(line => mapBeforeDuplicate.includes(line)));
 const accounts = parseDovecotUsers(beforeDuplicate);
 check("new accounts use Argon2id", accounts.filter(a => a.id.startsWith("public-")).length === 2 &&
   accounts.filter(a => a.id.startsWith("public-")).every(a => a.passwordHash.startsWith("{ARGON2ID}")));

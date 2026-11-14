@@ -7,7 +7,7 @@ import next from "next";
 import Busboy from "busboy";
 import { verifyPassword } from "./password-core.mjs";
 import { createSubmissionTransport, safeSmtpError } from "./smtp-transport.mjs";
-import { isValidPassword, isValidUserId, normalizeUserId, sessionToken, verifySessionToken } from "./auth-core.mjs";
+import { isValidPassword, isValidUserId, mayProvisionServiceAccount, normalizeUserId, sessionToken, verifySessionToken } from "./auth-core.mjs";
 import { parseDomains, parseDovecotUsers } from "./account-core.mjs";
 import { createAccountStore } from "./account-store.mjs";
 
@@ -301,6 +301,12 @@ async function handleAuth(req, res, pathname) {
 
   let provisionedAccount;
   if (pathname === "/api/auth/signup") {
+    if (userId === normalizeUserId(process.env.SMTP_AUTH_USER) &&
+        !mayProvisionServiceAccount(req.socket.remoteAddress, password, process.env.SMTP_AUTH_PASSWORD)) {
+      auditWarn("auth.signup.reserved_id", { ...context, userId, reason: "service_account", status: 303, durationMs: Date.now() - startedAt });
+      redirect(res, "/signup?error=exists");
+      return true;
+    }
     if (!isValidPassword(password)) {
       auditWarn("auth.signup.invalid_password", { ...context, userId, status: 303, durationMs: Date.now() - startedAt });
       redirect(res, "/signup?error=weak_password");

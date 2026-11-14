@@ -35,7 +35,7 @@ openssl x509 -in tls/fullchain.pem -noout -subject -issuer -dates
 
 `SMTP_AUTH_USER`는 전용 서비스 사용자(기본 `mailbox-submit`), `SMTP_AUTH_PASSWORD`는 32자 이상의 무작위 비밀번호로 설정한다. 일반 사용자의 비밀번호를 재사용하지 않는다. `MAIL_SMTP_CA_FILE`에 SMTP 인증서를 발급한 공개 CA bundle 경로를 지정한다(공인 CA이면 배포 환경의 공개 CA bundle도 가능). 서버 인증서의 SAN에 `MAIL_HOSTNAME`이 있어야 한다. CA 개인키를 지정하지 않는다.
 
-기동 후 전용 계정을 기존 가입 API로 등록하고 SMTP 인증을 검증한다. 명령은 기존 계정을 덮어쓰지 않으며 실패 시 운영 비밀값과 계정 설정을 확인한다.
+기동 후 컨테이너 내부 bootstrap으로 전용 계정을 가입 API에 등록하고 SMTP 인증을 검증한다. 서비스 ID는 일반 공개 가입에서 예약되며 실제 loopback 연결과 설정된 서비스 비밀번호를 모두 증명해야 생성할 수 있다. 전달된 IP/Host 헤더는 생성 권한을 부여하지 않는다. 명령은 기존 계정을 덮어쓰지 않으며 실패 시 운영 비밀값과 계정 설정을 확인한다.
 
 ```bash
 docker compose -f compose.platform.yaml exec --user 5000:5000 mailbox-webmail-ui node smtp-bootstrap.mjs

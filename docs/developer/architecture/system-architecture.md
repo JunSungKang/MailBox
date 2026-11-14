@@ -48,7 +48,7 @@ browser
      -> mailStore filesystem/import rule
 ```
 
-로그인 사용자는 HMAC 서명 cookie로 식별한다. 로그인 비밀번호는 `mailbox-account-store`의 Dovecot passwd-file에 있는 hash로 확인한다. 신규 계정은 8~128자 전체를 검증하는 Argon2id를 사용하고 기존 salted bcrypt(BLF-CRYPT) 계정도 변경 없이 검증한다. 회원가입은 아이디와 비밀번호로 공개 제공하며 Dovecot 사용자, 허용된 각 domain의 Postfix 수신 주소, 사용자별 Maildir 배달 경로를 함께 등록한다. 받은메일과 반송메일은 수신자 local-part, 보낸메일은 발신자 local-part가 현재 사용자와 일치해야 조회·상세·첨부 접근이 허용된다.
+로그인 사용자는 HMAC 서명 cookie로 식별한다. 로그인 비밀번호는 `mailbox-account-store`의 Dovecot passwd-file에 있는 hash로 확인한다. 신규 계정은 8~128자 전체를 검증하는 Argon2id를 사용하고 기존 salted bcrypt(BLF-CRYPT) 계정도 변경 없이 검증한다. 회원가입은 아이디와 비밀번호로 공개 제공하며 Dovecot 사용자, 허용된 각 domain의 Postfix 수신 주소, 사용자별 Maildir 배달 경로를 함께 등록한다. 기존 recipient local-part는 domain과 관계없이 예약하며, 원래 비밀번호로 소유권을 증명한 이전 계정만 해당 ID를 이전할 수 있다. SMTP 서비스 ID는 실제 loopback peer와 설정된 서비스 비밀번호를 모두 증명한 내부 bootstrap에만 생성 권한을 준다. 받은메일과 반송메일은 수신자 local-part, 보낸메일은 발신자 local-part가 현재 사용자와 일치해야 조회·상세·첨부 접근이 허용된다.
 
 ```text
 webmail signup

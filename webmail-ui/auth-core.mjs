@@ -12,6 +12,14 @@ export function isValidPassword(value) {
   return typeof value === "string" && value.length >= 8 && value.length <= 128 && !value.includes("\0");
 }
 
+export function mayProvisionServiceAccount(remoteAddress, password, configuredPassword) {
+  if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remoteAddress) ||
+      typeof password !== "string" || typeof configuredPassword !== "string" || configuredPassword.length < 32) return false;
+  const supplied = Buffer.from(password);
+  const expected = Buffer.from(configuredPassword);
+  return supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
+}
+
 export function sessionToken(userId, secret) {
   const signature = crypto.createHmac("sha256", secret).update(userId).digest("base64url");
   return `${userId}.${signature}`;
