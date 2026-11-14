@@ -7,7 +7,7 @@ import next from "next";
 import Busboy from "busboy";
 import { verifyPassword } from "./password-core.mjs";
 import { createSubmissionTransport, safeSmtpError } from "./smtp-transport.mjs";
-import { isValidPassword, isValidUserId, normalizeUserId, sessionToken, verifySessionToken } from "./auth-core.mjs";
+import { isValidPassword, isValidUserId, mayProvisionServiceAccount, normalizeUserId, sessionToken, verifySessionToken } from "./auth-core.mjs";
 import { parseDomains, parseDovecotUsers } from "./account-core.mjs";
 import { createAccountStore } from "./account-store.mjs";
 
@@ -28,15 +28,11 @@ const DEFAULT_MAIL_DOMAIN = process.env.MAIL_DEFAULT_DOMAIN || "ds-mail.p-e.kr";
 const MAIL_DOMAINS = parseDomains(process.env.MAIL_DOMAINS || DEFAULT_MAIL_DOMAIN);
 const AUTH_COOKIE = "mailbox_user";
 const SESSION_SECRET = process.env.WEBMAIL_SESSION_SECRET || (dev ? "local-development-only" : "");
-const SIGNUP_TOKEN = process.env.WEBMAIL_SIGNUP_TOKEN || (dev ? "local-signup-token" : "");
 const COOKIE_SECURE = process.env.WEBMAIL_COOKIE_SECURE === "true";
 const MAX_AUTH_BODY_BYTES = 16 * 1024;
 
 if (!dev && (SESSION_SECRET.length < 32 || SESSION_SECRET.startsWith("replace-with-"))) {
   throw new Error("WEBMAIL_SESSION_SECRET must be a non-placeholder value of at least 32 characters");
-}
-if (!dev && (SIGNUP_TOKEN.length < 16 || SIGNUP_TOKEN.startsWith("replace-with-"))) {
-  throw new Error("WEBMAIL_SIGNUP_TOKEN must be a non-placeholder value of at least 16 characters");
 }
 
 const submissionTransport = createSubmissionTransport();
@@ -273,7 +269,6 @@ async function handleAuth(req, res, pathname) {
   }
   const userId = normalizeUserId(form.get("userId")?.toString());
   const password = form.get("password")?.toString() || "";
-  const signupToken = form.get("signupToken")?.toString() || "";
   if (!isValidUserId(userId)) {
     auditWarn("auth.request.rejected", { ...context, reason: "invalid_user_id", status: 303, durationMs: Date.now() - startedAt });
     redirect(res, pathname === "/api/auth/login" ? "/login?error=invalid" : "/signup?error=invalid");
@@ -306,12 +301,10 @@ async function handleAuth(req, res, pathname) {
 
   let provisionedAccount;
   if (pathname === "/api/auth/signup") {
-    const validSignupToken =
-      signupToken.length === SIGNUP_TOKEN.length &&
-      crypto.timingSafeEqual(Buffer.from(signupToken), Buffer.from(SIGNUP_TOKEN));
-    if (!validSignupToken) {
-      auditWarn("auth.signup.invalid_token", { ...context, userId, durationMs: Date.now() - startedAt });
-      redirect(res, "/signup?error=invalid_signup_token");
+    if (userId === normalizeUserId(process.env.SMTP_AUTH_USER) &&
+        !mayProvisionServiceAccount(req.socket.remoteAddress, password, process.env.SMTP_AUTH_PASSWORD)) {
+      auditWarn("auth.signup.reserved_id", { ...context, userId, reason: "service_account", status: 303, durationMs: Date.now() - startedAt });
+      redirect(res, "/signup?error=exists");
       return true;
     }
     if (!isValidPassword(password)) {
@@ -709,7 +702,7 @@ await Promise.all([ensureDirs(), ensureAccountFiles()]);
 await accountStore.recover();
 await app.prepare();
 
-http
+const server = http
   .createServer(async (req, res) => {
     const parsedUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
     const pathname = parsedUrl.pathname;
@@ -737,3 +730,30 @@ http
       dataDir: DATA_DIR
     });
   });
+
+
+let stopping = false;
+async function shutdown(signal) {
+  if (stopping) return;
+  stopping = true;
+  const startedAt = Date.now();
+  const context = { requestId: crypto.randomUUID(), actor: "system", method: "SIGNAL", path: "server", signal };
+  auditLog("INFO", "server.shutdown.start", { ...context, status: "draining" });
+  const deadline = setTimeout(() => {
+    auditLog("ERROR", "server.shutdown.timeout", { ...context, status: "failed", durationMs: Date.now() - startedAt });
+    process.exit(1);
+  }, 55_000);
+  try {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await app.close();
+    clearTimeout(deadline);
+    auditLog("INFO", "server.shutdown.success", { ...context, status: "success", durationMs: Date.now() - startedAt });
+    process.exit(0);
+  } catch (error) {
+    clearTimeout(deadline);
+    auditError("server.shutdown.failure", { ...context, status: "failed", error, durationMs: Date.now() - startedAt });
+    process.exit(1);
+  }
+}
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));

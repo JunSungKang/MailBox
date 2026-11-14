@@ -153,6 +153,8 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .attachmentLink { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.7); }
 .footer { padding: 18px 20px 30px; color: var(--ink-soft); text-align: center; font-size: 11px; letter-spacing: .04em; }
 .footerOrbit { color: #5c8884; margin-right: 5px; }
+.footerLinks { display: inline-flex; gap: 12px; margin-left: 14px; }
+.footerLinks a { color: inherit; text-underline-offset: 3px; }
 
 @media (max-width: 820px) {
   .topBar { grid-template-columns: 1fr auto; width: calc(100% - 24px); margin-top: 12px; border-radius: 20px; }

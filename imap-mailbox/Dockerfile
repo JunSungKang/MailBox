@@ -1,20 +1,27 @@
-FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
-
-RUN apk upgrade --no-cache \
-  && apk add --no-cache ca-certificates dovecot icu-data-full 'zlib>=1.4-r0' \
-  && addgroup -g 1500 smtp-auth \
-  && addgroup -g 5000 vmail \
-  && adduser -D -H -u 5000 -G vmail -h /var/mail/vhosts -s /sbin/nologin vmail \
-  && find /usr /bin /sbin -type f -perm /6000 -exec chmod a-s {} +
-
+ARG UBUNTU_IMAGE=ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
+FROM ${UBUNTU_IMAGE}
+ARG SOURCE_REVISION=unknown
+ARG MAILBOX_VERSION=0.2.0
+LABEL org.opencontainers.image.source="https://github.com/JunSungKang/MailBox" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.version="${MAILBOX_VERSION}"
+COPY --from=license_files /LICENSE /NOTICE /usr/share/doc/mailbox/
+ENV DEBIAN_FRONTEND=noninteractive
+RUN groupadd -g 1500 smtp-auth && groupadd -g 5000 vmail \
+ && useradd -u 5000 -g vmail -d /var/mail/vhosts -s /usr/sbin/nologin vmail \
+ && printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod 0755 /usr/sbin/policy-rc.d \
+ && apt-get update && apt-get dist-upgrade -y \
+ && apt-get install -y --no-install-recommends ca-certificates dovecot-core dovecot-imapd \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' dovecot-core)" ge '1:2.4.2+dfsg1-3ubuntu2.1' \
+ && dovecot --version | grep -q '^2\.4\.' \
+ && doveadm pw -l | grep -q ARGON2ID \
+ && rm -rf /var/lib/apt/lists/* \
+ && find /usr -type f -perm /6000 -exec chmod a-s {} +
 COPY dovecot.conf /etc/dovecot/dovecot.conf
 COPY users /etc/dovecot/users
 COPY entrypoint.sh /usr/local/bin/mailbox-imap-mailbox-entrypoint
-
 RUN chmod 0755 /usr/local/bin/mailbox-imap-mailbox-entrypoint \
-  && chown root:dovecot /etc/dovecot/users \
-  && chmod 0640 /etc/dovecot/users
-
+ && chown root:dovecot /etc/dovecot/users && chmod 0640 /etc/dovecot/users
 EXPOSE 143
-
 ENTRYPOINT ["mailbox-imap-mailbox-entrypoint"]

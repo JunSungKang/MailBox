@@ -1,0 +1,10 @@
+MailBox
+Copyright (C) 2026 JunSungKang and contributors
+
+SPDX-License-Identifier: AGPL-3.0-only
+
+MailBox in this revision is licensed under GNU Affero General Public License,
+version 3 only. See LICENSE for the complete license text.
+Third-party operating-system packages, Node.js, Postfix, Dovecot, Nginx and
+JavaScript dependencies retain their respective licenses and notices.
+Earlier MailBox revisions retain the licenses supplied with those revisions.

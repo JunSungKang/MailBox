@@ -1,0 +1,160 @@
+name: platform
+
+x-mailbox-port-reservations:
+  web: [20005, 20006, 20007, 20008, 20009]
+  api: [20105, 20106, 20107, 20108, 20109]
+x-mailbox-logging: &mailbox-logging
+  driver: local
+  options:
+    max-size: "${MAIL_LOG_MAX_SIZE:-10m}"
+    max-file: "${MAIL_LOG_MAX_FILE:-5}"
+x-mailbox-node-build: &mailbox-node-build
+  NODE_IMAGE: ${NODE_IMAGE:-mailbox-node24:ubuntu26.04}
+
+services:
+  mailbox-smtp-receiver:
+    image: mailbox-smtp-receiver:${MAILBOX_IMAGE_TAG:-ubuntu26.04}
+    build:
+      context: ./smtp-receiver
+      additional_contexts: {license_files: .}
+      args: *mailbox-node-build
+    container_name: mailbox-smtp-receiver
+    restart: unless-stopped
+    stop_grace_period: 30s
+    logging: *mailbox-logging
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETPCAP, SETUID, SETGID, KILL, NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    environment:
+      MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.ds-mail.p-e.kr}
+      MAIL_DOMAINS: ${MAIL_DOMAINS:-ds-mail.p-e.kr post.ds-mail.p-e.kr}
+      SMTP_AUTH_USER: ${SMTP_AUTH_USER:-mailbox-submit}
+    ports:
+      - "${SMTP_PORT:-25}:25"
+    expose: [25, 587, 2525, 2587]
+    networks:
+      default: {}
+      mailbox-compat:
+        ipv4_address: ${MAILBOX_COMPAT_SMTP_IP:-172.25.0.2}
+    volumes:
+      - mailbox-store:/var/mail/vhosts
+      - smtp-queue-store:/var/spool/postfix
+      - smtp-auth-store:/run/smtp-auth:ro
+      - mailbox-account-store:/accounts
+      - type: bind
+        source: ${MAIL_LOG_DIR:-./logs}/smtp
+        target: /var/log
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${MAIL_TLS_DIR:-./tls}
+        target: /etc/mailbox/tls
+        read_only: true
+        bind: {create_host_path: false}
+
+  mailbox-imap-mailbox:
+    image: mailbox-imap-mailbox:${MAILBOX_IMAGE_TAG:-ubuntu26.04}
+    build:
+      context: ./imap-mailbox
+      additional_contexts: {license_files: .}
+    container_name: mailbox-imap-mailbox
+    restart: unless-stopped
+    stop_grace_period: 30s
+    logging: *mailbox-logging
+    depends_on: [mailbox-smtp-receiver]
+    ports:
+      - "${IMAP_PORT:-143}:143"
+    volumes:
+      - smtp-auth-store:/run/smtp-auth
+      - mailbox-store:/var/mail/vhosts
+      - mailbox-account-store:/accounts
+      - type: bind
+        source: ${MAIL_TLS_DIR:-./tls}
+        target: /etc/mailbox/tls
+        read_only: true
+        bind: {create_host_path: false}
+
+  mailbox-webmail-ui:
+    image: mailbox-webmail-ui:${MAILBOX_IMAGE_TAG:-ubuntu26.04}
+    build:
+      context: ./webmail-ui
+      additional_contexts: {license_files: .}
+      args: *mailbox-node-build
+    container_name: mailbox-webmail-ui
+    restart: unless-stopped
+    stop_grace_period: 60s
+    logging: *mailbox-logging
+    depends_on: [mailbox-smtp-receiver, mailbox-imap-mailbox]
+    environment:
+      PORT: 3000
+      NODE_OPTIONS: ${WEBMAIL_NODE_OPTIONS:---max-old-space-size=512 --max-semi-space-size=16}
+      MAIL_DATA_DIR: /app/data
+      MAILDIR_IMPORT_DIR: /mailboxes/mailbox/Maildir
+      MAILDIR_IMPORT_PARENT_DIR: /mailboxes
+      MAIL_ACCOUNT_DIR: /accounts
+      MAIL_DOMAINS: ${MAIL_DOMAINS:-ds-mail.p-e.kr post.ds-mail.p-e.kr}
+      SMTP_HOST: mailbox-smtp-receiver
+      SMTP_SUBMISSION_PORT: 587
+      SMTP_AUTH_USER: ${SMTP_AUTH_USER:-mailbox-submit}
+      SMTP_AUTH_PASSWORD: ${SMTP_AUTH_PASSWORD:?SMTP_AUTH_PASSWORD is required}
+      SMTP_TLS_SERVERNAME: ${MAIL_HOSTNAME:-mail.ds-mail.p-e.kr}
+      SMTP_TLS_CA_FILE: /etc/mailbox/smtp-ca.pem
+      MAIL_FROM: ${MAIL_FROM:-mailbox@ds-mail.p-e.kr}
+      MAIL_DEFAULT_DOMAIN: ${MAIL_DEFAULT_DOMAIN:-ds-mail.p-e.kr}
+      WEBMAIL_SESSION_SECRET: ${WEBMAIL_SESSION_SECRET:?WEBMAIL_SESSION_SECRET is required}
+      WEBMAIL_COOKIE_SECURE: "true"
+    ports:
+      - "127.0.0.1:${MAILBOX_API_PORT:-20105}:3000"
+    volumes:
+      - type: bind
+        source: ${MAIL_SMTP_CA_FILE:-./tls/ca.pem}
+        target: /etc/mailbox/smtp-ca.pem
+        read_only: true
+        bind: {create_host_path: false}
+      - webmail-data-store:/app/data
+      - mailbox-store:/mailboxes:ro
+      - mailbox-account-store:/accounts
+
+  mailbox-webmail-proxy:
+    image: mailbox-webmail-proxy:${MAILBOX_IMAGE_TAG:-ubuntu26.04}
+    build:
+      context: ./webmail-ui
+      dockerfile: Dockerfile.proxy
+      additional_contexts: {license_files: .}
+    container_name: mailbox-webmail-proxy
+    restart: unless-stopped
+    stop_grace_period: 5m
+    logging: *mailbox-logging
+    depends_on: [mailbox-webmail-ui]
+    environment:
+      MAIL_WEB_HOSTNAME: ${MAIL_WEB_HOSTNAME:-mail.ds-mail.p-e.kr}
+      MAIL_WEB_HTTPS_PORT: 20006
+      NGINX_WORKER_PROCESSES: ${NGINX_WORKER_PROCESSES:-2}
+    ports:
+      - "20005:80"
+      - "20006:443"
+      # Temporary old URLs remain usable until all consumers have moved.
+      - "${MAILBOX_LEGACY_HTTP_PORT:-18080}:80"
+      - "${MAILBOX_LEGACY_HTTPS_PORT:-18443}:443"
+    volumes:
+      - type: bind
+        source: ${MAIL_TLS_DIR:-./tls}
+        target: /etc/mailbox/tls
+        read_only: true
+        bind: {create_host_path: false}
+    read_only: true
+    tmpfs: [/tmp, /var/cache/nginx]
+
+networks:
+  # Shared platform network is managed by the integration deployment.
+  default:
+    name: platform_default
+    external: true
+  mailbox-compat:
+    name: ${MAILBOX_COMPAT_NETWORK:-mailbox_default}
+    external: true
+volumes:
+  mailbox-store: {name: mailbox-store, external: true}
+  smtp-queue-store: {name: smtp-queue-store, external: true}
+  smtp-auth-store: {name: smtp-auth-store, external: true}
+  mailbox-account-store: {name: mailbox-account-store, external: true}
+  webmail-data-store: {name: webmail-data-store, external: true}

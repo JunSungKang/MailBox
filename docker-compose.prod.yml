@@ -11,6 +11,7 @@ services:
     image: mailbox-smtp-receiver:prod
     build:
       context: ./smtp-receiver
+      additional_contexts: {license_files: .}
     container_name: mailbox-smtp-receiver
     restart: unless-stopped
     logging: *common-logging
@@ -19,7 +20,7 @@ services:
       MAIL_DOMAINS: ${MAIL_DOMAINS:-ds-mail.p-e.kr post.ds-mail.p-e.kr}
       SMTP_AUTH_USER: ${SMTP_AUTH_USER:-mailbox-submit}
     cap_drop: [ALL]
-    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETPCAP, SETUID, SETGID, KILL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETPCAP, SETUID, SETGID, KILL, NET_BIND_SERVICE]
     security_opt: [no-new-privileges:true]
     ports:
       - "${SMTP_PORT:-25}:2525"
@@ -40,6 +41,7 @@ services:
     image: mailbox-imap-mailbox:prod
     build:
       context: ./imap-mailbox
+      additional_contexts: {license_files: .}
     container_name: mailbox-imap-mailbox
     restart: unless-stopped
     logging: *common-logging
@@ -62,6 +64,7 @@ services:
     image: mailbox-webmail-ui:prod
     build:
       context: ./webmail-ui
+      additional_contexts: {license_files: .}
     container_name: mailbox-webmail-ui
     restart: unless-stopped
     logging: *common-logging
@@ -84,7 +87,6 @@ services:
       MAIL_FROM: ${MAIL_FROM:-mailbox@ds-mail.p-e.kr}
       MAIL_DEFAULT_DOMAIN: ${MAIL_DEFAULT_DOMAIN:-ds-mail.p-e.kr}
       WEBMAIL_SESSION_SECRET: ${WEBMAIL_SESSION_SECRET:?WEBMAIL_SESSION_SECRET is required}
-      WEBMAIL_SIGNUP_TOKEN: ${WEBMAIL_SIGNUP_TOKEN:?WEBMAIL_SIGNUP_TOKEN is required}
       WEBMAIL_COOKIE_SECURE: "true"
     volumes:
       - type: bind
@@ -101,6 +103,7 @@ services:
     image: mailbox-webmail-proxy:prod
     build:
       context: ./webmail-ui
+      additional_contexts: {license_files: .}
       dockerfile: Dockerfile.proxy
     container_name: mailbox-webmail-proxy
     restart: unless-stopped

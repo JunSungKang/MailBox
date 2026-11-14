@@ -1,4 +1,5 @@
-FROM node:24-alpine AS deps
+ARG NODE_IMAGE=mailbox-node24:ubuntu26.04
+FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
@@ -6,7 +7,9 @@ RUN npm ci
 FROM deps AS production-deps
 RUN npm prune --omit=dev
 
-FROM node:24-alpine AS builder
+FROM ${NODE_IMAGE} AS builder
+ARG SOURCE_REVISION=unknown
+ENV MAILBOX_SOURCE_REVISION=${SOURCE_REVISION}
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV MAILDIR_IMPORT_DIR=/mailboxes/mailbox/Maildir
@@ -14,17 +17,27 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-FROM node:24-alpine AS runner
+FROM ${NODE_IMAGE} AS runner
+ARG SOURCE_REVISION=unknown
+ARG MAILBOX_VERSION=0.2.0
+LABEL org.opencontainers.image.source="https://github.com/JunSungKang/MailBox" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.version="${MAILBOX_VERSION}"
+COPY --from=license_files /LICENSE /NOTICE /usr/share/doc/mailbox/
+ENV MAILBOX_SOURCE_REVISION=${SOURCE_REVISION}
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV MAIL_DATA_DIR=/app/data
 ENV MAILDIR_IMPORT_DIR=/mailboxes/mailbox/Maildir
-RUN rm -rf /usr/local/lib/node_modules /opt/yarn* /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg \
-  && apk upgrade --no-cache \
-  && apk add --no-cache su-exec 'zlib>=1.4-r0'
-RUN addgroup -S -g 5000 vmail && adduser -S -u 5000 -G vmail nextjs
+ENV NODE_OPTIONS="--max-old-space-size=512 --max-semi-space-size=16"
+RUN apt-get update && apt-get dist-upgrade -y \
+  && apt-get install -y --no-install-recommends util-linux \
+  && rm -rf /var/lib/apt/lists/* /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx \
+  && groupadd -g 5000 vmail && useradd -u 5000 -g vmail -M -d /app -s /usr/sbin/nologin nextjs \
+  && find /usr -type f -perm /6000 -exec chmod a-s {} +
 RUN mkdir -p /app/data/mail/inbox /app/data/mail/sent /app/data/mail/bounced /app/data/tmp /app/data/drop/inbox /app/data/drop/processed /app/data/drop/failed && chown -R nextjs:vmail /app/data
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/server.mjs ./server.mjs

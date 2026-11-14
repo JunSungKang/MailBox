@@ -9,6 +9,12 @@ import { execFileSync } from "node:child_process";
 import { createSubmissionTransport, submissionOptions, safeSmtpError } from "./smtp-transport.mjs";
 import { ensureSubmissionAccount } from "./smtp-bootstrap.mjs";
 
+test("standard submission defaults to 587 and explicit legacy 2587 remains selectable", () => {
+  const env = { SMTP_HOST: "fixture.test", SMTP_TLS_SERVERNAME: "fixture.test", SMTP_AUTH_USER: "fixture-service", SMTP_AUTH_PASSWORD: "x".repeat(48) };
+  assert.equal(submissionOptions(env).port, 587);
+  assert.equal(submissionOptions({ ...env, SMTP_SUBMISSION_PORT: "2587" }).port, 2587);
+});
+
 test("bootstrap verifies existing long credentials without reapplying signup policy", async () => {
   const env = { SMTP_AUTH_USER: "existing-service", SMTP_AUTH_PASSWORD: "x".repeat(80) };
   let verified = 0;
@@ -20,12 +26,13 @@ test("bootstrap verifies existing long credentials without reapplying signup pol
 test("bootstrap provisions only after an authentication failure and verifies again", async () => {
   let verified = 0;
   let signups = 0;
-  await ensureSubmissionAccount({ env: { SMTP_AUTH_USER: "new-service", SMTP_AUTH_PASSWORD: "x".repeat(48), WEBMAIL_SIGNUP_TOKEN: "fixture-invite" },
+  await ensureSubmissionAccount({ env: { SMTP_AUTH_USER: "new-service", SMTP_AUTH_PASSWORD: "x".repeat(48) },
     verify: async () => { if (++verified === 1) throw Object.assign(new Error("fixture auth failure"), { code: "EAUTH" }); },
     fetchImpl: async (_url, options) => {
       signups += 1;
       assert.equal(options.redirect, "manual");
       assert.equal(options.body.get("userId"), "new-service");
+      assert.equal(options.body.has("signupToken"), false);
       return new Response(null, { status: 303, headers: { location: "/inbox" } });
     } });
   assert.equal(signups, 1);
@@ -48,7 +55,7 @@ test("bootstrap rejects wrong existing credentials even if signup says account e
 
 test("submission requires authenticated, verified TLS without plaintext fallback", async (t) => {
   // Temporary keys stay under the checkout, including on developer machines.
-  const directory = fs.mkdtempSync(path.join(process.cwd(), ".smtp-test-"));
+  const directory = fs.mkdtempSync(path.join(process.env.MAILBOX_TEST_TMP || process.cwd(), ".smtp-test-"));
   const key = path.join(directory, "key.pem");
   const cert = path.join(directory, "cert.pem");
   try {

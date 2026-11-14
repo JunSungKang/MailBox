@@ -1,5 +1,5 @@
-user nginx;
-worker_processes auto;
+user www-data;
+worker_processes ${NGINX_WORKER_PROCESSES};
 pid /tmp/nginx.pid;
 error_log /dev/stderr warn;
 
@@ -20,6 +20,12 @@ http {
     log_format audit escape=json '{"time":"$time_iso8601","level":"$audit_level","event":"web.proxy.request","requestId":"$request_id","actor":"anonymous","ip":"$remote_addr","userAgent":"$http_user_agent","method":"$request_method","path":"$uri","durationSeconds":$request_time,"status":$status}';
     access_log /dev/stdout audit;
 
+    client_body_temp_path /tmp/client_body;
+    proxy_temp_path /tmp/proxy;
+    fastcgi_temp_path /tmp/fastcgi;
+    uwsgi_temp_path /tmp/uwsgi;
+    scgi_temp_path /tmp/scgi;
+
     # Retain streaming uploads and the application's existing size limit.
     client_max_body_size 0;
     proxy_request_buffering off;
@@ -27,13 +33,22 @@ http {
     proxy_read_timeout 300s;
     proxy_send_timeout 300s;
 
+    upstream mailbox_webmail {
+        server mailbox-webmail-ui:3000;
+        keepalive 8;
+    }
+
     server {
+        listen 80;
+        listen [::]:80;
         listen 8080;
         listen [::]:8080;
         return 308 https://${MAIL_WEB_HOSTNAME}:${MAIL_WEB_HTTPS_PORT}$request_uri;
     }
 
     server {
+        listen 443 ssl;
+        listen [::]:443 ssl;
         listen 8443 ssl;
         listen [::]:8443 ssl;
         http2 on;
@@ -42,8 +57,9 @@ http {
         ssl_protocols TLSv1.2 TLSv1.3;
 
         location / {
-            proxy_pass http://mailbox-webmail-ui:3000;
+            proxy_pass http://mailbox_webmail;
             proxy_http_version 1.1;
+            proxy_set_header Connection "";
             proxy_set_header Host $http_host;
             proxy_set_header X-Forwarded-Host $http_host;
             proxy_set_header X-Forwarded-Proto $scheme;
