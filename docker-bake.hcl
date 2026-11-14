@@ -1,4 +1,4 @@
-variable "VERSION" { default = "0.2.0" }
+variable "VERSION" { default = "0.2.1" }
 variable "SOURCE_REVISION" { default = "unknown" }
 variable "TAG" { default = "ubuntu26.04" }
 variable "NODE_IMAGE" { default = "" }

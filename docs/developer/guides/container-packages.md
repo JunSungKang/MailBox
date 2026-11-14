@@ -8,7 +8,7 @@
 - `ghcr.io/junsungkang/mail-server-imap-mailbox`
 - `ghcr.io/junsungkang/mail-server-webmail-ui`
 
-이름은 기존 registry 소비자와의 호환성을 위해 유지한다. 기존 `v0.1.0`과 웹메일 `v0.1.1`은 덮어쓰지 않는다. 새 릴리스 태그는 `v0.2.0`, `latest`, `sha-<전체 SHA>`이다. 각 릴리스 index는 네이티브 `linux/amd64`, `linux/arm64` 이미지를 포함한다. `build-<workflow run ID>-<arch>`는 검증된 조립용 이미지이며 일반 소비자는 릴리스 태그/digest를 사용한다.
+이름은 기존 registry 소비자와의 호환성을 위해 유지한다. 기존 `v0.1.0`·웹메일 `v0.1.1`·`v0.2.0`과 각 `sha-<전체 SHA>` 태그는 삭제하거나 덮어쓰지 않는다. 새 릴리스 태그는 `v0.2.1`, `latest`, `sha-<새 전체 SHA>`이다. `latest`만 새 릴리스를 가리키도록 이동하며 이전 버전은 해당 버전 태그나 digest로 계속 사용할 수 있다. 각 릴리스 index는 네이티브 `linux/amd64`, `linux/arm64` 이미지를 포함한다. `build-<workflow run ID>-<arch>`는 검증된 조립용 이미지이며 일반 소비자는 릴리스 태그/digest를 사용한다.
 
 ## 빌드
 
