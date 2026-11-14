@@ -13,7 +13,7 @@
 cp .env.example .env
 ```
 
-운영 전 `WEBMAIL_SESSION_SECRET`을 32자 이상의 무작위 값으로, `WEBMAIL_SIGNUP_TOKEN`을 운영자만 아는 16자 이상의 가입 코드로 교체한다. placeholder 값으로는 운영 Webmail이 시작되지 않는다. 세션 secret이 바뀌면 기존 로그인 세션은 만료된다. 운영 Compose는 HTTPS 프록시와 `Secure` 로그인 cookie를 사용한다. 개발 HTTP 접속은 `WEBMAIL_COOKIE_SECURE=false`를 사용한다.
+운영 전 `WEBMAIL_SESSION_SECRET`을 32자 이상의 무작위 값으로 교체한다. 세션 secret의 placeholder 값으로는 운영 Webmail이 시작되지 않는다. 회원가입은 아이디와 비밀번호로 공개 제공하며 `WEBMAIL_SIGNUP_TOKEN`은 설정하지 않아도 된다. 기존 환경 파일에 남아 있는 이 변수는 사용하지 않는다. 세션 secret이 바뀌면 기존 로그인 세션은 만료된다. 운영 Compose는 HTTPS 프록시와 `Secure` 로그인 cookie를 사용한다. 개발 HTTP 접속은 `WEBMAIL_COOKIE_SECURE=false`를 사용한다.
 
 `MAIL_DOMAINS`에는 회원가입 시 자동으로 생성할 수신 domain을 공백으로 구분해 입력한다. 첫 번째 domain을 `MAIL_DEFAULT_DOMAIN`과 동일하게 두는 것을 권장한다. 계정은 `MAILBOX_ACCOUNT_VOLUME` named volume에 보존된다.
 
@@ -65,6 +65,6 @@ docker compose --env-file .env -f compose.platform.yaml config --quiet
 
 ## 기존 설치 전환
 
-기존 `webmail-data-store/users.json`의 scrypt hash는 Dovecot passwd-file hash로 안전하게 변환할 수 없다. 기존 설치를 전환할 때는 데이터를 백업하고 기존 사용자가 운영 가입 코드와 기존 비밀번호로 다시 가입하도록 안내한다. 새 버전은 `users.json`의 기존 ID를 예약하고 scrypt 비밀번호로 소유권을 검증한 뒤 Argon2id 계정을 생성한다. 원본 `users.json`은 변경하거나 임의로 삭제하지 않는다. 기존 Dovecot BLF-CRYPT 계정과 hash는 그대로 유지한다.
+기존 `webmail-data-store/users.json`의 scrypt hash는 Dovecot passwd-file hash로 안전하게 변환할 수 없다. 기존 설치를 전환할 때는 데이터를 백업하고 기존 사용자가 같은 ID와 기존 비밀번호로 다시 가입하도록 안내한다. 새 버전은 `users.json`의 기존 ID를 예약하고 scrypt 비밀번호로 소유권을 검증한 뒤 Argon2id 계정을 생성한다. 원본 `users.json`은 변경하거나 임의로 삭제하지 않는다. 기존 Dovecot BLF-CRYPT 계정과 hash는 그대로 유지한다.
 
 통합 Ubuntu 이미지의 빌드·공유 잠금·실제 볼륨·호환 endpoint·복구 절차는 [Ubuntu platform 전환](ubuntu-platform-transition.md)을 따른다. 이전 `docker-compose*.yml`은 이전 commit과 이미지로 복구할 때의 구성이다.

@@ -28,15 +28,11 @@ const DEFAULT_MAIL_DOMAIN = process.env.MAIL_DEFAULT_DOMAIN || "ds-mail.p-e.kr";
 const MAIL_DOMAINS = parseDomains(process.env.MAIL_DOMAINS || DEFAULT_MAIL_DOMAIN);
 const AUTH_COOKIE = "mailbox_user";
 const SESSION_SECRET = process.env.WEBMAIL_SESSION_SECRET || (dev ? "local-development-only" : "");
-const SIGNUP_TOKEN = process.env.WEBMAIL_SIGNUP_TOKEN || (dev ? "local-signup-token" : "");
 const COOKIE_SECURE = process.env.WEBMAIL_COOKIE_SECURE === "true";
 const MAX_AUTH_BODY_BYTES = 16 * 1024;
 
 if (!dev && (SESSION_SECRET.length < 32 || SESSION_SECRET.startsWith("replace-with-"))) {
   throw new Error("WEBMAIL_SESSION_SECRET must be a non-placeholder value of at least 32 characters");
-}
-if (!dev && (SIGNUP_TOKEN.length < 16 || SIGNUP_TOKEN.startsWith("replace-with-"))) {
-  throw new Error("WEBMAIL_SIGNUP_TOKEN must be a non-placeholder value of at least 16 characters");
 }
 
 const submissionTransport = createSubmissionTransport();
@@ -273,7 +269,6 @@ async function handleAuth(req, res, pathname) {
   }
   const userId = normalizeUserId(form.get("userId")?.toString());
   const password = form.get("password")?.toString() || "";
-  const signupToken = form.get("signupToken")?.toString() || "";
   if (!isValidUserId(userId)) {
     auditWarn("auth.request.rejected", { ...context, reason: "invalid_user_id", status: 303, durationMs: Date.now() - startedAt });
     redirect(res, pathname === "/api/auth/login" ? "/login?error=invalid" : "/signup?error=invalid");
@@ -306,14 +301,6 @@ async function handleAuth(req, res, pathname) {
 
   let provisionedAccount;
   if (pathname === "/api/auth/signup") {
-    const validSignupToken =
-      signupToken.length === SIGNUP_TOKEN.length &&
-      crypto.timingSafeEqual(Buffer.from(signupToken), Buffer.from(SIGNUP_TOKEN));
-    if (!validSignupToken) {
-      auditWarn("auth.signup.invalid_token", { ...context, userId, durationMs: Date.now() - startedAt });
-      redirect(res, "/signup?error=invalid_signup_token");
-      return true;
-    }
     if (!isValidPassword(password)) {
       auditWarn("auth.signup.invalid_password", { ...context, userId, status: 303, durationMs: Date.now() - startedAt });
       redirect(res, "/signup?error=weak_password");

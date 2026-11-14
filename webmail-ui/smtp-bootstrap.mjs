@@ -23,7 +23,7 @@ export async function ensureSubmissionAccount({ env = process.env, fetchImpl = f
     method: "POST",
     redirect: "manual",
     body: new URLSearchParams({ userId: env.SMTP_AUTH_USER,
-      password: env.SMTP_AUTH_PASSWORD, signupToken: env.WEBMAIL_SIGNUP_TOKEN })
+      password: env.SMTP_AUTH_PASSWORD })
   });
   const location = response.headers.get("location");
   if (response.status !== 303 || !["/inbox", "/signup?error=exists"].includes(location)) {

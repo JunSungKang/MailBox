@@ -38,7 +38,7 @@ docker compose -f compose.platform.yaml logs mailbox-webmail-proxy
 - Webmail 로그에서 `auth.signup.provision_failure`, `auth.signup.exists`, `auth.login.backend_failure` 이벤트를 확인한다.
 - `mailbox-account-store` volume이 세 컨테이너에 연결됐는지 Compose config로 확인한다.
 - Dovecot 사용자 파일과 Postfix 수신 주소 map의 소유권이 UID/GID `5000`에서 읽고 쓸 수 있는지 확인한다.
-- 기존 `users.json` 계정은 자동 변환되지 않으므로 운영 가입 코드로 다시 가입한다.
+- 기존 `users.json` 계정은 자동 변환되지 않으므로 같은 ID와 기존 비밀번호로 다시 가입한다. 가입 코드는 필요하지 않다.
 - IMAP 인증 프로세스의 `extra_groups = vmail`이 적용돼 있는지 확인한다. 계정 디렉터리 권한을 모든 사용자에게 열어 해결하지 않는다.
 
 ## 웹메일 접속 실패

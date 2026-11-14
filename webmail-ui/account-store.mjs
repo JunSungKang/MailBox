@@ -95,7 +95,7 @@ export function createAccountStore({ directory, legacyUsersPath, domains, onReco
     if (!Array.isArray(users)) throw new Error("Invalid legacy account store");
     const reserved = users.filter((user) => typeof user?.id === "string" && normalizeUserId(user.id) === userId);
     if (!reserved.length) return;
-    // An invite code permits signup; it does not prove ownership of existing mail.
+    // Public signup must still prove ownership of an existing legacy account.
     if (reserved.length !== 1 || typeof reserved[0].salt !== "string" || typeof reserved[0].passwordHash !== "string") {
       throw accountExists();
     }

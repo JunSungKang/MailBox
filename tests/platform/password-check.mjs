@@ -6,7 +6,7 @@ import bcrypt from '/app/node_modules/bcryptjs/index.js';
 import {mergeDovecotUser,mergePostfixAccounts,parseDovecotUsers} from '/app/account-core.mjs';
 const checks=[];
 const record=(name,condition)=>{assert(condition,name);checks.push(name);};
-const post=(route,id,password)=>fetch('http://127.0.0.1:3000/api/auth/'+route,{method:'POST',redirect:'manual',body:new URLSearchParams({userId:id,password,signupToken:process.env.WEBMAIL_SIGNUP_TOKEN})});
+const post=(route,id,password)=>fetch('http://127.0.0.1:3000/api/auth/'+route,{method:'POST',redirect:'manual',body:new URLSearchParams({userId:id,password})});
 class IMAP{
  constructor(){this.buffer='';this.lines=[];this.number=0;this.attach(net.connect({host:'imap',port:143}));}
  attach(socket){this.socket=socket;socket.setTimeout(15000,()=>socket.destroy(new Error('IMAP timeout')));socket.on('error',e=>{this.error=e;this.waiter?.reject(e);this.waiter=null;});socket.on('data',b=>{this.buffer+=b.toString();while(this.buffer.includes('\r\n')){const i=this.buffer.indexOf('\r\n');this.lines.push(this.buffer.slice(0,i));this.buffer=this.buffer.slice(i+2);this.flush();}});}
