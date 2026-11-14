@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { currentUserId } from "@/lib/auth";
 import AppNavigation from "./AppNavigation";
+import { sourceArchiveUrl } from "@/lib/sourceLink";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -69,7 +70,13 @@ export default async function RootLayout({
             </div>
           </header>
           <main className="main" id="main-content">{children}</main>
-          <footer className="footer"><span className="footerOrbit" aria-hidden="true">◎</span> MailBox · 내일의 우편함</footer>
+          <footer className="footer">
+            <span className="footerOrbit" aria-hidden="true">◎</span> MailBox · 내일의 우편함
+            <span className="footerLinks">
+              <a href={sourceArchiveUrl()} aria-label="MailBox 소스코드 내려받기">소스코드</a>
+              <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-only</a>
+            </span>
+          </footer>
         </div>
       </body>
     </html>

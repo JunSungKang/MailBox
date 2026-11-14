@@ -1,5 +1,12 @@
 ARG UBUNTU_IMAGE=ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
 FROM ${UBUNTU_IMAGE}
+ARG SOURCE_REVISION=unknown
+ARG MAILBOX_VERSION=0.2.0
+LABEL org.opencontainers.image.source="https://github.com/JunSungKang/MailBox" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.version="${MAILBOX_VERSION}"
+COPY --from=license_files /LICENSE /NOTICE /usr/share/doc/mailbox/
 ENV DEBIAN_FRONTEND=noninteractive
 RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod 0755 /usr/sbin/policy-rc.d \
  && apt-get update && apt-get dist-upgrade -y \

@@ -11,27 +11,43 @@ const task = fs.realpathSync(path.resolve(taskArgument));
 assert(task.startsWith(root + path.sep));
 const candidates = JSON.parse(fs.readFileSync(path.join(task, 'reports/candidate-images.json')));
 const result = {};
+const architecture = process.env.EXPECTED_ARCHITECTURE || "arm64";
+assert(["arm64", "amd64"].includes(architecture));
 const run = (args) => execFileSync('docker', args, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 for (const [name, candidate] of Object.entries(candidates)) {
   const current = JSON.parse(run(['image', 'inspect', candidate.tag]))[0];
-  assert.equal(current.Id, candidate.imageId); assert.equal(current.Architecture, 'arm64');
+  assert.equal(current.Id, candidate.imageId); assert.equal(current.Architecture, architecture);
   const archive = path.join(task, 'images', name + '.tar');
   const tar = (entry) => execFileSync('tar', ['-xOf', archive, entry]);
-  const index = JSON.parse(tar('index.json'));
-  assert(index.manifests.some(x => x.digest === candidate.imageId));
   function blob(digest) {
     assert(/^sha256:[a-f0-9]{64}$/.test(digest));
     const bytes = tar('blobs/sha256/' + digest.slice(7));
     assert.equal('sha256:' + crypto.createHash('sha256').update(bytes).digest('hex'), digest);
     return JSON.parse(bytes);
   }
-  let manifest = blob(candidate.imageId);
-  if (manifest.manifests) {
-    const platform = manifest.manifests.find(x => x.platform?.os === 'linux' && x.platform?.architecture === 'arm64');
-    assert(platform); manifest = blob(platform.digest);
+  const entries = runTarList();
+  function runTarList() { return execFileSync('tar', ['-tf', archive], { encoding: 'utf8' }).split('\n'); }
+  let configId, imageConfig;
+  if (entries.includes('index.json')) {
+    const index = JSON.parse(tar('index.json'));
+    const root = index.manifests.find(x => x.digest === candidate.imageId) || (index.manifests.length === 1 ? index.manifests[0] : null);
+    assert(root, 'Ambiguous OCI archive root');
+    let manifest = blob(root.digest), platformDigest = root.digest;
+    if (manifest.manifests) {
+      const platform = manifest.manifests.find(x => x.platform?.os === 'linux' && x.platform?.architecture === architecture);
+      assert(platform); platformDigest = platform.digest; manifest = blob(platformDigest);
+    }
+    configId = manifest.config.digest; imageConfig = blob(configId);
+    assert([root.digest, platformDigest, configId].includes(candidate.imageId), 'Archive is not bound to the selected image');
+  } else {
+    const manifests = JSON.parse(tar('manifest.json'));
+    const manifest = manifests.find(x => x.RepoTags?.includes(candidate.tag));
+    assert(manifest, 'Docker archive tag missing');
+    const bytes = tar(manifest.Config);
+    configId = 'sha256:' + crypto.createHash('sha256').update(bytes).digest('hex');
+    assert.equal(configId, candidate.imageId); imageConfig = JSON.parse(bytes);
   }
-  const configId = manifest.config.digest;
-  const imageConfig = blob(configId); assert.equal(imageConfig.architecture, 'arm64');
+  assert.equal(imageConfig.architecture, architecture);
   const scan = JSON.parse(fs.readFileSync(path.join(task, 'reports', name + '.trivy.json')));
   assert.equal(scan.Metadata.ImageID, configId);
   const vulnerabilities = scan.Results.flatMap(x => x.Vulnerabilities || []);

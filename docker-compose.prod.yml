@@ -11,6 +11,7 @@ services:
     image: mailbox-smtp-receiver:prod
     build:
       context: ./smtp-receiver
+      additional_contexts: {license_files: .}
     container_name: mailbox-smtp-receiver
     restart: unless-stopped
     logging: *common-logging
@@ -40,6 +41,7 @@ services:
     image: mailbox-imap-mailbox:prod
     build:
       context: ./imap-mailbox
+      additional_contexts: {license_files: .}
     container_name: mailbox-imap-mailbox
     restart: unless-stopped
     logging: *common-logging
@@ -62,6 +64,7 @@ services:
     image: mailbox-webmail-ui:prod
     build:
       context: ./webmail-ui
+      additional_contexts: {license_files: .}
     container_name: mailbox-webmail-ui
     restart: unless-stopped
     logging: *common-logging
@@ -100,6 +103,7 @@ services:
     image: mailbox-webmail-proxy:prod
     build:
       context: ./webmail-ui
+      additional_contexts: {license_files: .}
       dockerfile: Dockerfile.proxy
     container_name: mailbox-webmail-proxy
     restart: unless-stopped

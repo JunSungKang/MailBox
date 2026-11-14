@@ -1,3 +1,5 @@
+variable "VERSION" { default = "0.2.0" }
+variable "SOURCE_REVISION" { default = "unknown" }
 variable "TAG" { default = "ubuntu26.04" }
 variable "NODE_IMAGE" { default = "" }
 variable "UBUNTU_IMAGE" { default = "ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c" }
@@ -14,8 +16,8 @@ target "node24" {
   output = ["type=docker"]
 }
 target "node-consumer" {
-  args = { NODE_IMAGE = NODE_IMAGE == "" ? "node_runtime" : NODE_IMAGE }
-  contexts = NODE_IMAGE == "" ? { node_runtime = "target:node24" } : {}
+  args = { NODE_IMAGE = NODE_IMAGE == "" ? "node_runtime" : NODE_IMAGE, SOURCE_REVISION = SOURCE_REVISION, MAILBOX_VERSION = VERSION }
+  contexts = NODE_IMAGE == "" ? { node_runtime = "target:node24", license_files = "." } : { license_files = "." }
   platforms = PLATFORMS
   output = ["type=docker"]
 }
@@ -31,7 +33,8 @@ target "webmail" {
 }
 target "imap" {
   context = "imap-mailbox"
-  args = { UBUNTU_IMAGE = UBUNTU_IMAGE }
+  args = { UBUNTU_IMAGE = UBUNTU_IMAGE, SOURCE_REVISION = SOURCE_REVISION, MAILBOX_VERSION = VERSION }
+  contexts = { license_files = "." }
   tags = ["mailbox-imap-mailbox:${TAG}"]
   platforms = PLATFORMS
   output = ["type=docker"]
@@ -39,7 +42,8 @@ target "imap" {
 target "proxy" {
   context = "webmail-ui"
   dockerfile = "Dockerfile.proxy"
-  args = { UBUNTU_IMAGE = UBUNTU_IMAGE }
+  args = { UBUNTU_IMAGE = UBUNTU_IMAGE, SOURCE_REVISION = SOURCE_REVISION, MAILBOX_VERSION = VERSION }
+  contexts = { license_files = "." }
   tags = ["mailbox-webmail-proxy:${TAG}"]
   platforms = PLATFORMS
   output = ["type=docker"]
