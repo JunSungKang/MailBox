@@ -1,6 +1,6 @@
 # MailBox Architecture Contract
 
-문서 최신화 기준일: 2026-11-04
+문서 최신화 기준일: 2026-11-15
 
 ## Repository Ownership
 
@@ -52,7 +52,7 @@ SMTP나 IMAP 모듈이 Webmail 내부 파일을 import하거나, Webmail이 Post
 - Dovecot SASL 소켓은 `smtp-auth-store`에서 root와 SMTP 전용 GID 1500만 접근한다. 계정 맵 감시기는 UID 5010, capability 0으로 실행한다.
 - Postfix master/virtual의 필요한 root 권한과 일반 작업자의 권한을 구분한다. 잔여 root 권한을 위험 수용 승인으로 간주하지 않는다.
 - `mailbox_user`는 HMAC 검증을 통과한 cookie만 신뢰한다.
-- 가입은 운영 가입 코드를 요구하며 Dovecot 사용자와 허용 domain의 Postfix 수신 주소를 함께 생성한다.
+- 가입은 아이디와 8~128자 비밀번호로 공개 제공하며 Dovecot 사용자와 허용 domain의 Postfix 수신 주소를 함께 생성한다. 기존 계정 중복과 이전 계정 소유권 검사는 유지한다. 기존 recipient local-part는 domain과 무관하게 예약하며, 기존 비밀번호로 소유권을 증명한 이전 계정만 배달 경로를 이전할 수 있다. SMTP 서비스 ID는 실제 loopback peer와 설정된 서비스 비밀번호를 모두 증명한 내부 bootstrap만 생성할 수 있고 전달 헤더는 권한 근거가 아니다.
 - inbox, sent, bounced, detail, attachment, send는 현재 사용자 소유권을 검사한다.
 - `mailbox-store`는 Webmail에 read-only로 mount한다.
 - `mailbox-account-store`는 계정 원본이며 Webmail만 제한된 두 계정 파일을 갱신한다.

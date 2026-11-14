@@ -32,7 +32,7 @@ class SMTP {
   async close(){await this.cmd('RSET');await this.cmd('QUIT');this.socket.destroy();}
 }
 const password=process.env.FIXTURE_PASSWORD;
-const response=await fetch('http://127.0.0.1:3000/api/auth/signup',{method:'POST',redirect:'manual',body:new URLSearchParams({userId:'fixture-user',password,signupToken:process.env.WEBMAIL_SIGNUP_TOKEN})});
+const response=await fetch('http://127.0.0.1:3000/api/auth/signup',{method:'POST',redirect:'manual',body:new URLSearchParams({userId:'fixture-user',password})});
 check('fixture account provisioned through API',response.status===303 && ['/inbox','/signup?error=exists'].includes(response.headers.get('location')));
 await new Promise(resolve=>setTimeout(resolve,2500));
 let smtp=new SMTP(2525);await smtp.read();let ehlo=await smtp.cmd('EHLO untrusted.fixture.test');

@@ -1,6 +1,6 @@
 # MailBox Agent Development Rules
 
-문서 최신화 기준일: 2026-08-02
+문서 최신화 기준일: 2026-11-15
 
 ## Required Pre-Work
 
@@ -16,7 +16,7 @@
 - 서비스 간 네트워크, port, volume, 환경변수 조립은 루트 Compose가 소유한다.
 - Webmail 화면은 `webmail-ui/src/app`, 저장·감사·접근 규칙은 `webmail-ui/src/lib`, HTTP multipart·인증 endpoint는 `webmail-ui/server.mjs`가 소유한다.
 - 사용자별 목록, 상세, 첨부, 발송 경로에는 같은 서명 세션과 소유권 검사를 적용한다.
-- 운영에서는 placeholder `WEBMAIL_SESSION_SECRET`, `WEBMAIL_SIGNUP_TOKEN`으로 서버를 시작하지 않는다.
+- 운영에서는 placeholder `WEBMAIL_SESSION_SECRET`으로 서버를 시작하지 않는다. 회원가입은 아이디와 비밀번호로 공개 제공하며 가입 코드를 요구하지 않는다. SMTP 서비스 ID와 기존 recipient ID 예약, 이전 계정 소유권 검증을 우회하지 않는다.
 
 ## Audit Log Rules
 

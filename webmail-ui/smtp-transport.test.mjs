@@ -26,12 +26,13 @@ test("bootstrap verifies existing long credentials without reapplying signup pol
 test("bootstrap provisions only after an authentication failure and verifies again", async () => {
   let verified = 0;
   let signups = 0;
-  await ensureSubmissionAccount({ env: { SMTP_AUTH_USER: "new-service", SMTP_AUTH_PASSWORD: "x".repeat(48), WEBMAIL_SIGNUP_TOKEN: "fixture-invite" },
+  await ensureSubmissionAccount({ env: { SMTP_AUTH_USER: "new-service", SMTP_AUTH_PASSWORD: "x".repeat(48) },
     verify: async () => { if (++verified === 1) throw Object.assign(new Error("fixture auth failure"), { code: "EAUTH" }); },
     fetchImpl: async (_url, options) => {
       signups += 1;
       assert.equal(options.redirect, "manual");
       assert.equal(options.body.get("userId"), "new-service");
+      assert.equal(options.body.has("signupToken"), false);
       return new Response(null, { status: 303, headers: { location: "/inbox" } });
     } });
   assert.equal(signups, 1);

@@ -1,6 +1,6 @@
 # MailBox System Architecture
 
-문서 최신화 기준일: 2026-11-04
+문서 최신화 기준일: 2026-11-15
 
 ## 모듈 경계
 
@@ -48,7 +48,7 @@ browser
      -> mailStore filesystem/import rule
 ```
 
-로그인 사용자는 HMAC 서명 cookie로 식별한다. 로그인 비밀번호는 `mailbox-account-store`의 Dovecot passwd-file에 있는 hash로 확인한다. 신규 계정은 8~128자 전체를 검증하는 Argon2id를 사용하고 기존 salted bcrypt(BLF-CRYPT) 계정도 변경 없이 검증한다. 회원가입은 운영 가입 코드를 요구하며 Dovecot 사용자, 허용된 각 domain의 Postfix 수신 주소, 사용자별 Maildir 배달 경로를 함께 등록한다. 받은메일과 반송메일은 수신자 local-part, 보낸메일은 발신자 local-part가 현재 사용자와 일치해야 조회·상세·첨부 접근이 허용된다.
+로그인 사용자는 HMAC 서명 cookie로 식별한다. 로그인 비밀번호는 `mailbox-account-store`의 Dovecot passwd-file에 있는 hash로 확인한다. 신규 계정은 8~128자 전체를 검증하는 Argon2id를 사용하고 기존 salted bcrypt(BLF-CRYPT) 계정도 변경 없이 검증한다. 회원가입은 아이디와 비밀번호로 공개 제공하며 Dovecot 사용자, 허용된 각 domain의 Postfix 수신 주소, 사용자별 Maildir 배달 경로를 함께 등록한다. 기존 recipient local-part는 domain과 관계없이 예약하며, 원래 비밀번호로 소유권을 증명한 이전 계정만 해당 ID를 이전할 수 있다. SMTP 서비스 ID는 실제 loopback peer와 설정된 서비스 비밀번호를 모두 증명한 내부 bootstrap에만 생성 권한을 준다. 받은메일과 반송메일은 수신자 local-part, 보낸메일은 발신자 local-part가 현재 사용자와 일치해야 조회·상세·첨부 접근이 허용된다.
 
 ```text
 webmail signup
@@ -68,7 +68,7 @@ webmail signup
 - `MAIL_NETWORK_SUBNET`은 Compose 네트워크 대역만 정하며 중계 권한을 부여하지 않는다. 공개 `25 → 25` (호환 리스너 `2525` 유지)는 로컬 domain 수신만 허용하고, 내부 `587` 및 호환 `2587`은 TLS와 허용된 전용 SASL 사용자만 허용한다.
 - Dovecot은 `smtp-auth-store`의 Unix socket으로 SMTP AUTH를 제공한다. SMTP 서비스는 socket volume을 read-only로 mount한다. 일반 IMAP 사용자 인증만으로 제출 권한을 얻지 못한다.
 - `MAIL_SMTP_CA_FILE`은 앱이 서버를 검증할 공개 CA bundle이며 서버 개인키를 앱에 공유하지 않는다. 외부 MTA 배달도 TLS와 인증서 검증 실패 시 큐에 보류한다.
-- `WEBMAIL_SESSION_SECRET`과 `WEBMAIL_SIGNUP_TOKEN`은 운영에서 placeholder를 허용하지 않는다.
+- `WEBMAIL_SESSION_SECRET`은 운영에서 placeholder를 허용하지 않는다. `WEBMAIL_SIGNUP_TOKEN`은 사용하지 않으며 가입에 필요하지 않다.
 - 운영 Compose의 `WEBMAIL_COOKIE_SECURE`는 `true`로 고정한다. 개발 HTTP 실행은 `false`를 사용한다.
 - SMTP 수신 가능 ID는 회원가입으로 `mailbox-account-store/virtual-mailbox-accounts`에 등록한다.
 
