@@ -70,7 +70,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Stage tested architecture images
+      - name: Stage tested images and wait for public registry visibility
         env:
           GH_TOKEN: ${{ github.token }}
         run: node tests/release/stage.mjs
