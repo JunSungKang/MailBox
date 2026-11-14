@@ -15,7 +15,7 @@ const password = "synthetic-account-password";
 
 async function fixture(callback) {
   // Test data and credentials stay in the checkout and are always removed.
-  const directory = await fs.mkdtemp(path.join(path.dirname(fileURLToPath(import.meta.url)), ".account-test-"));
+  const directory = await fs.mkdtemp(path.join(process.env.MAILBOX_TEST_TMP || path.dirname(fileURLToPath(import.meta.url)), ".account-test-"));
   const users = path.join(directory, "dovecot-users");
   const recipients = path.join(directory, "virtual-mailbox-accounts");
   const legacy = path.join(directory, "users.json");
@@ -31,14 +31,28 @@ test("legacy account IDs require their original password before migration", asyn
   const legacyRaw = JSON.stringify([{ id: "owner", salt,
     passwordHash: crypto.scryptSync(password, salt, 64).toString("base64url") }]);
   await fs.writeFile(f.legacy, legacyRaw, { mode: 0o600 });
+  const legacyRecipients = "owner@example.com shared/Maildir/\n";
+  await fs.writeFile(f.recipients, legacyRecipients);
   await assert.rejects(f.store.provision("owner", "different-synthetic-password"), { code: "ACCOUNT_EXISTS" });
   assert.equal(await fs.readFile(f.users, "utf8"), "# original accounts\n");
-  assert.equal(await fs.readFile(f.recipients, "utf8"), "# original recipients\n");
+  assert.equal(await fs.readFile(f.recipients, "utf8"), legacyRecipients);
   await f.store.provision("owner", password);
   const account = parseDovecotUsers(await fs.readFile(f.users, "utf8"))[0];
   assert.equal(await verifyPassword(password, account.passwordHash), true);
   assert.match(await fs.readFile(f.recipients, "utf8"), /owner@example\.com owner\/Maildir\//);
   assert.equal(await fs.readFile(f.legacy, "utf8"), legacyRaw);
+}));
+
+test("public signup cannot claim existing aliases or orphaned delivery addresses", async () => fixture(async (f) => {
+  for (const entry of ["reserved@example.com old-owner/Maildir/", "reserved@example.com reserved/Maildir/",
+    "RESERVED@historical.example.net shared/Maildir/"]) {
+    await fs.writeFile(f.recipients, entry + "\n");
+    await assert.rejects(f.store.provision("reserved", password), { code: "ACCOUNT_EXISTS" });
+    assert.equal(await fs.readFile(f.users, "utf8"), "# original accounts\n");
+    assert.equal(await fs.readFile(f.recipients, "utf8"), entry + "\n");
+  }
+  await f.store.provision("new-owner", password);
+  assert.match(await fs.readFile(f.recipients, "utf8"), /RESERVED@historical\.example\.net|reserved@historical\.example\.net/);
 }));
 
 test("unreadable legacy metadata cannot silently release a reserved ID", async () => fixture(async (f) => {
