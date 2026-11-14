@@ -4,17 +4,17 @@ import crypto from "node:crypto";
 import { architecture, assertCurrentMain } from "./registry.mjs";
 const revision = "a".repeat(40);
 const digest = value => "sha256:" + crypto.createHash("sha256").update(value).digest("hex");
-async function fixture(callback, { labels = {}, corrupt = false, duplicate = false } = {}) {
+async function fixture(callback, { labels = {}, corrupt = false, duplicate = false, wrongDescriptor = false } = {}) {
   const config = JSON.stringify({ os: "linux", architecture: "arm64", config: { Labels: {
     "org.opencontainers.image.source": "https://github.com/JunSungKang/MailBox", "org.opencontainers.image.licenses": "AGPL-3.0-only",
     "org.opencontainers.image.revision": revision, "org.opencontainers.image.version": "0.2.0", ...labels } } });
   const image = JSON.stringify({ config: { digest: digest(config) } });
-  const descriptor = { platform: { os: "linux", architecture: "arm64" }, digest: digest(image) };
+  const descriptor = { platform: { os: "linux", architecture: "arm64" }, digest: wrongDescriptor ? "sha256:" + "0".repeat(64) : digest(image) };
   const index = JSON.stringify({ manifests: duplicate ? [descriptor, descriptor] : [descriptor] });
   const original = globalThis.fetch;
   globalThis.fetch = async url => {
     if (String(url).includes("/token?")) return Response.json({ token: "synthetic-public-pull-token" });
-    const bytes = String(url).includes("/blobs/") ? (corrupt ? config + " " : config) : String(url).endsWith(digest(image)) ? image : index;
+    const bytes = String(url).includes("/blobs/") ? (corrupt ? config + " " : config) : String(url).endsWith("/manifests/build") ? index : image;
     return new Response(bytes, { headers: { "docker-content-digest": digest(bytes) } });
   };
   try { await callback(); } finally { globalThis.fetch = original; }
@@ -30,6 +30,10 @@ test("wrong source/license and altered config cannot pass package promotion", as
   await fixture(() => assert.rejects(architecture("junsungkang/fixture-corrupt", "build", "arm64", revision, "0.2.0")), { corrupt: true });
   await fixture(() => assert.rejects(architecture("junsungkang/fixture-duplicate", "build", "arm64", revision, "0.2.0")), { duplicate: true });
 });
+test("a self-consistent response for a different descriptor is rejected", async () => fixture(
+  () => assert.rejects(architecture("junsungkang/fixture-wrong-descriptor", "build", "arm64", revision, "0.2.0"), /requested descriptor/),
+  { wrongDescriptor: true }
+));
 test("publication refuses forks, non-main refs and a stale main SHA", async () => {
   const originalFetch = globalThis.fetch;
   const keys = ["GITHUB_ACTIONS", "GITHUB_REPOSITORY", "GITHUB_REF", "GITHUB_SHA"];

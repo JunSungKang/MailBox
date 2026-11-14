@@ -60,15 +60,44 @@ try {
   };
   await bootstrap();
   const smtp = JSON.parse(exec("node", "/checks/smtp-check.mjs")); save("smtp.json", smtp);
+  const delivered = JSON.parse(exec("node", "--input-type=module", "-e", `
+    import fs from 'node:fs';import crypto from 'node:crypto';
+    let files=[];for(let attempt=0;attempt<60;attempt++){
+      files=['new','cur'].flatMap(folder=>{const p='/mailboxes/fixture-user/Maildir/'+folder;return fs.existsSync(p)?fs.readdirSync(p).map(f=>p+'/'+f):[];});
+      if(files.length)break;await new Promise(r=>setTimeout(r,250));
+    }
+    if(files.length!==1)throw Error('Expected one delivered local fixture message');
+    const bytes=fs.readFileSync(files[0]),text=bytes.toString();
+    if(!text.includes('Subject: isolated security fixture')||!text.includes('Maildir delivery fixture only'))throw Error('Delivered message content mismatch');
+    console.log(JSON.stringify({status:'success',messages:files.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')}));
+  `)); save("local-delivery.json", delivered);
+  save("imap-before.json", JSON.parse(exec("node", "/checks/imap-check.mjs")));
   const passwords = JSON.parse(exec("node", "/checks/password-check.mjs")); save("passwords.json", passwords);
+  const readback = () => JSON.parse(exec("node", "--input-type=module", "-e", `
+    const login=await fetch('http://127.0.0.1:3000/api/auth/login',{method:'POST',redirect:'manual',body:new URLSearchParams({userId:'fixture-user',password:process.env.FIXTURE_PASSWORD})});
+    if(login.status!==303||login.headers.get('location')!=='/inbox')throw Error('Fixture login failed');
+    const cookie=(login.headers.get('set-cookie')||'').split(';')[0];
+    const response=await fetch('http://127.0.0.1:3000/inbox',{headers:{Cookie:cookie}}),html=await response.text();
+    const count=Number((html.match(new RegExp('class="countPill"[^>]*>([0-9]+)'))||[])[1]);
+    const start=html.indexOf('href="/mail/inbox/');
+    if(response.status!==200||count!==1||start<0||!html.includes('isolated security fixture'))throw Error('Delivered mail not imported exactly once');
+    const detailPath=html.slice(start+6,html.indexOf('"',start+6));
+    const detail=await fetch('http://127.0.0.1:3000'+detailPath,{headers:{Cookie:cookie}});
+    if(detail.status!==200||!(await detail.text()).includes('Maildir delivery fixture only'))throw Error('Delivered body cannot be read');
+    console.log(JSON.stringify({status:'success',messages:count,bodyRead:true}));
+  `));
+  save("webmail-readback-before.json", readback());
   const webCheck = 'const r=await fetch("http://127.0.0.1:3000/signup");const html=await r.text();const ref=process.env.MAILBOX_SOURCE_REVISION;const source=/^[a-f0-9]{40}$/.test(ref||"")?ref:"main";if(r.status!==200||html.includes("name=\\"signupToken\\"")||!html.includes("/archive/"+source+".tar.gz")||!html.includes("AGPL-3.0-only"))throw Error("Signup/source offer failed");';
   exec("node", "--input-type=module", "-e", webCheck);
   const id = compose("ps", "-q", "web").trim(); compose("stop", "--timeout", "60", "web");
   const stopped = JSON.parse(docker(["inspect", "--format", "{{json .State}}", id])); assert.equal(stopped.ExitCode, 0); assert.equal(stopped.OOMKilled, false);
   compose("start", "web"); exec("node", "--input-type=module", "-e", 'for(let i=0;i<100;i++){try{if((await fetch("http://127.0.0.1:3000/signup")).status===200)process.exit(0)}catch{}await new Promise(r=>setTimeout(r,300));}process.exit(1)');
   exec("node", "--input-type=module", "-e", webCheck); await bootstrap();
+  save("webmail-readback-after.json", readback());
+  save("imap-after.json", JSON.parse(exec("env", "IMAP_CHECK_PHASE=after", "node", "/checks/imap-check.mjs")));
   save("smoke.json", { status: "success", images, internalNetwork: true, untrustedPeerDeniedBeforeBootstrap: true,
-    sourceOffer: true, signupWithoutCode: true, smtpAndImapTLS: true, passwordCompatibility: true, gracefulRestart: true, externalRealMailSent: false });
+    sourceOffer: true, signupWithoutCode: true, smtpAndImapTLS: true, passwordCompatibility: true, gracefulRestart: true,
+    localDeliveryCount: delivered.messages, maildirContentVerified: true, imapCountUidFlagsPreserved: true, webmailImportAndBodyRead: true, externalRealMailSent: false });
   console.log(JSON.stringify({ time: new Date().toISOString(), level: "INFO", event: "release.fixture.success", status: "success", prefix }));
 } catch (error) {
   if (prepared) {

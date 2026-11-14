@@ -20,6 +20,7 @@ export async function manifest(name, ref) {
   const bytes = Buffer.from(await r.arrayBuffer());
   const digest = "sha256:" + crypto.createHash("sha256").update(bytes).digest("hex");
   assert.equal(r.headers.get("docker-content-digest"), digest);
+  if (ref.startsWith("sha256:")) assert.equal(digest, ref, "Manifest does not match the requested descriptor");
   return { digest, data: JSON.parse(bytes) };
 }
 export async function architecture(name, ref, arch, revision, version) {

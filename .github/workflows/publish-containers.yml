@@ -47,10 +47,12 @@ jobs:
       - name: Prepare workspace-only artifacts
         run: mkdir -p "$CHECK_DIR/reports" "$DOCKER_CONFIG" "$BUILDX_CONFIG"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: v0.39.0
       - name: Validate source metadata
         run: |
           node tests/release/check.mjs
-          node --test tests/release/registry.test.mjs
+          node --test tests/release/registry.test.mjs tests/release/promotion.test.mjs
       - name: Build native images with the common Ubuntu Node24 base
         env:
           PLATFORM: ${{ matrix.platform }}
@@ -100,6 +102,8 @@ jobs:
           persist-credentials: false
       - run: mkdir -p "$CHECK_DIR/reports" "$DOCKER_CONFIG" "$BUILDX_CONFIG"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: v0.39.0
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io

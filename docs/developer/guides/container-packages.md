@@ -35,7 +35,7 @@ node tests/release/smoke.mjs
 node tests/release/scan.mjs
 ```
 
-검사는 버전·SPDX·원문 hash·OCI label·내장 LICENSE, native runtime/기능, 단위 테스트와 별도 내부 네트워크의 SMTP/IMAP/Webmail fixture를 확인한다. 서비스 계정 선점·전달 헤더 위조 거부, 코드 없는 가입, 비밀번호 호환, TLS/CA/호스트·SASL, 로컬 메일 배달, 소스 링크와 정상 재시작을 검사한다. 실제 운영 계정·volume을 선택하거나 외부 실제 수신자에게 메일을 보내지 않는다. fixture가 끝나면 정확히 생성한 컨테이너·볼륨·네트워크·테스트 자격을 제거한다.
+검사는 버전·SPDX·원문 hash·각 이미지의 OCI label·내장 LICENSE, native runtime/기능, 단위 테스트와 별도 내부 네트워크의 SMTP/IMAP/Webmail fixture를 확인한다. 서비스 계정 선점·전달 헤더 위조 거부, 코드 없는 가입, 비밀번호 호환, TLS/CA/호스트·SASL, 실제 Maildir 도착1통과 원문 내용, IMAP 개수·UID·읽음 상태, Webmail 가져오기·본문 조회, 소스 링크와 정상 재시작을 검사한다. 실제 운영 계정·volume을 선택하거나 외부 실제 수신자에게 메일을 보내지 않는다. fixture가 끝나면 정확히 생성한 컨테이너·볼륨·네트워크·테스트 자격을 제거한다.
 
 Trivy는 digest를 고정한 scanner와 최신 DB를 사용하며 severity/미수정 항목을 숨기지 않는다. image archive→manifest→config→scan의 연결을 확인하고 HIGH/CRITICAL이 있으면 게시를 중단한다. 남은 severity는 raw report에 기록한다. 검사기는 OCI archive와 Docker archive 및 두 native architecture를 지원한다.
 
@@ -47,7 +47,9 @@ Trivy는 digest를 고정한 scanner와 최신 DB를 사용하며 severity/미�
 4. 두 native runner가 동일한 SHA를 빌드하고 검증·scan을 마친 뒤 architecture별 조립용 tag를 게시한다.
 5. 두 작업 모두 성공해야 조립한다. 모든 package의 양쪽 architecture·revision·license·버전을 검증한 뒤 버전/SHA index를 만들고, 세 index 검증 후 `latest`를 옮긴다.
 
-동시 게시를 직렬화하며 게시 전 현재 main SHA를 다시 조회해 오래된 실행이 최신 태그를 덮어쓰지 못하게 한다. 이미 존재하는 버전/SHA 태그를 다른 구성이나 revision으로 바꾸는 작업은 거부한다. 새 소스 릴리스에는 버전을 올린다. 서로 다른 세 registry 이름의 태그 변경은 단일 트랜잭션이 아니므로 최종 `published.json`의 세 digest 검증을 완료 기준으로 사용한다.
+Buildx는 v0.39.0으로 고정하고 Docker/OCI 형식에 맞게 조립한다. Docker manifest list에 지원되지 않는 index annotation은 넣지 않으며 source/license/version/revision은 검증된 각 이미지 config label에 유지한다. digest 참조 요청은 응답 body hash를 요청 digest와도 비교한다.
+
+동시 게시를 직렬화하며 게시 전 현재 main SHA를 다시 조회해 오래된 실행이 최신 태그를 덮어쓰지 못하게 한다. 기존 버전/SHA의 root index가 다르면 거부하고, 기존 immutable 태그는 재작성하지 않는다. 없는 짝만 검증된 기존 digest에서 복사한다. 새 소스 릴리스에는 버전을 올린다. 서로 다른 세 registry 이름의 태그 변경은 단일 트랜잭션이 아니므로 최종 `published.json`의 세 digest 검증을 완료 기준으로 사용한다.
 
 사람의 기존 GitHub 세션은 commit/push/PR/merge에 사용하고 App은 formal review를 수행한다. registry 게시에는 workflow 저장소의 단기 `GITHUB_TOKEN`과 `contents: read`, `packages: write`만 사용한다. PAT나 App private key를 저장소·로그·명령 인자로 넣지 않는다. checkout credential을 보존하지 않고 검증 artifact에는 지정한 reports 디렉터리만 포함한다.
 
