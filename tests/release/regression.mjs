@@ -86,8 +86,8 @@ export async function verifyRegression({
     import fs from 'node:fs';
     const login=await fetch('http://127.0.0.1:3000/api/auth/login',{method:'POST',redirect:'manual',body:new URLSearchParams({userId:'fixture-user',password:process.env.FIXTURE_PASSWORD})});
     const cookie=login.headers.get('set-cookie').split(';')[0],samples=[];
-    for(let i=0;i<65;i++){const start=performance.now();const r=await fetch('http://127.0.0.1:3000/inbox',{headers:{Cookie:cookie}});if(r.status!==200)throw Error('Benchmark request failed');await r.text();if(i>=5)samples.push(performance.now()-start);}
-    samples.sort((a,b)=>a-b);console.log(JSON.stringify({requests:samples.length,medianMs:samples[30],p95Ms:samples[57],memory:fs.readFileSync('/proc/1/status','utf8').split('\\n').filter(line=>/^Vm(HWM|RSS):/.test(line))}));
+    for(let i=0;i<220;i++){const start=performance.now();const r=await fetch('http://127.0.0.1:3000/inbox',{headers:{Cookie:cookie}});if(r.status!==200)throw Error('Benchmark request failed');await r.text();if(i>=20)samples.push(performance.now()-start);}
+    samples.sort((a,b)=>a-b);console.log(JSON.stringify({requests:samples.length,medianMs:samples[Math.floor(samples.length/2)],p95Ms:samples[Math.floor(samples.length*0.95)],memory:fs.readFileSync('/proc/1/status','utf8').split('\\n').filter(line=>/^Vm(HWM|RSS):/.test(line))}));
   `,
       ),
     );
