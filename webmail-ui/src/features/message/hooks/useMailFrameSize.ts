@@ -1,36 +1,7 @@
 "use client";
-
-import { useEffect, useMemo, useRef, useState } from "react";
-
-type MailHtmlFrameProps = {
-  html: string;
-  title: string;
-};
-
-const minFrameHeight = 240;
-const maxFrameHeight = 16000;
-
-function framePreamble(): string {
-  return [
-    '<meta charset="utf-8">',
-    '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    '<base target="_blank">',
-    "<style>html,body{margin:0;padding:0;background:transparent;}</style>"
-  ].join("");
-}
-
-function buildFrameDocument(html: string): string {
-  const preamble = framePreamble();
-  if (/<html[\s>]/i.test(html)) {
-    if (/<head[\s>]/i.test(html)) {
-      return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${preamble}`);
-    }
-    return html.replace(/<html(\s[^>]*)?>/i, (match) => `${match}<head>${preamble}</head>`);
-  }
-
-  return `<!doctype html><html><head>${preamble}</head><body>${html}</body></html>`;
-}
-
+import { useEffect, useRef, useState } from "react";
+const minFrameHeight = 240,
+  maxFrameHeight = 16000;
 function measuredHeight(document: Document): number {
   const body = document.body;
   const element = document.documentElement;
@@ -44,18 +15,16 @@ function measuredHeight(document: Document): number {
           body?.offsetHeight || 0,
           element.scrollHeight,
           element.offsetHeight,
-          element.clientHeight
-        ) + 2
-      )
-    )
+          element.clientHeight,
+        ) + 2,
+      ),
+    ),
   );
 }
 
-export default function MailHtmlFrame({ html, title }: MailHtmlFrameProps) {
+export function useMailFrameSize(srcDoc: string) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(minFrameHeight);
-  const srcDoc = useMemo(() => buildFrameDocument(html), [html]);
-
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return undefined;
@@ -64,6 +33,7 @@ export default function MailHtmlFrame({ html, title }: MailHtmlFrameProps) {
     let resizeObserver: ResizeObserver | null = null;
     let mutationObserver: MutationObserver | null = null;
     let intervalId = 0;
+    let timeoutId = 0;
     const imageListeners: Array<() => void> = [];
 
     const resize = () => {
@@ -71,7 +41,9 @@ export default function MailHtmlFrame({ html, title }: MailHtmlFrameProps) {
       if (!document) return;
 
       const nextHeight = measuredHeight(document);
-      setHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
+      setHeight((currentHeight) =>
+        currentHeight === nextHeight ? currentHeight : nextHeight,
+      );
     };
 
     const scheduleResize = () => {
@@ -108,7 +80,7 @@ export default function MailHtmlFrame({ html, title }: MailHtmlFrameProps) {
           attributes: true,
           characterData: true,
           childList: true,
-          subtree: true
+          subtree: true,
         });
       }
 
@@ -122,8 +94,10 @@ export default function MailHtmlFrame({ html, title }: MailHtmlFrameProps) {
         });
       });
 
+      window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
       intervalId = window.setInterval(scheduleResize, 500);
-      window.setTimeout(() => {
+      timeoutId = window.setTimeout(() => {
         window.clearInterval(intervalId);
       }, 5000);
     };
@@ -136,21 +110,12 @@ export default function MailHtmlFrame({ html, title }: MailHtmlFrameProps) {
       frame.removeEventListener("load", bindFrameContent);
       window.cancelAnimationFrame(animationFrameId);
       window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
       resizeObserver?.disconnect();
       mutationObserver?.disconnect();
       imageListeners.splice(0).forEach((removeListener) => removeListener());
     };
   }, [srcDoc]);
 
-  return (
-    <iframe
-      className="messageHtmlFrame"
-      ref={frameRef}
-      referrerPolicy="no-referrer"
-      sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
-      srcDoc={srcDoc}
-      style={{ height }}
-      title={title}
-    />
-  );
+  return { frameRef, height };
 }

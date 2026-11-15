@@ -51,3 +51,7 @@ For actual replacement, follow the [transition procedure](../guides/ubuntu-platf
 - `webmail-ui/src/lib/auditLogger.ts`: structured audit logging.
 
 [System Architecture](../architecture/system-architecture.md) describes structure and data flow. The [Ubuntu platform transition](../guides/ubuntu-platform-transition.md) records integrated builds and migration.
+
+## Modular implementation
+
+See [Modular Webmail](../architecture/modular-webmail.md) for the current backend services, common frontend components, namespace conventions, validation and recovery. Root runtime modules and `src/lib` retain compatibility exports; new code uses the documented service boundaries.
