@@ -57,7 +57,7 @@ The pre-publication baseline and subsequent checks confirmed that the visible `v
 
 ## Getting Started
 
-Requirements: Docker Engine/Desktop, Compose 2.17 or later, Buildx/Bake, DNS and TLS certificates, and a network that permits mail traffic. Prepare the source and configuration:
+Requirements: Docker Engine/Desktop, Compose 2.17 or later, Buildx/Bake, DNS and TLS certificates, and a network that permits mail traffic. Standalone Bake defaults to `linux/arm64`; explicitly override its target platforms for AMD64, or use the published multi-platform images. Prepare the source and configuration:
 
 ```bash
 git clone https://github.com/JunSungKang/MailBox.git mail-box

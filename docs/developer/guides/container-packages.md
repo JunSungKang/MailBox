@@ -19,7 +19,7 @@ docker buildx bake -f docker-bake.hcl --print
 docker buildx bake -f docker-bake.hcl
 ```
 
-SMTP and Webmail share the Node.js 24 target without overwriting another project's shared tag. Bake variables include `TAG`, `VERSION`, `SOURCE_REVISION`, `PLATFORMS` and `NODE_IMAGE`. External bases must still provide Ubuntu 26.04, Node.js 24 and the required native crypto support.
+Standalone Bake defaults `PLATFORMS` to `["linux/arm64"]`, independent of the builder architecture; override target platforms explicitly for AMD64. SMTP and Webmail share the Node.js 24 target without overwriting another project's shared tag. Bake variables include `TAG`, `VERSION`, `SOURCE_REVISION`, `PLATFORMS` and `NODE_IMAGE`. External bases must still provide Ubuntu 26.04, Node.js 24 and the required native crypto support.
 
 Module Dockerfiles require the `license_files` named context. Root `.dockerignore` excludes everything except `LICENSE` and `NOTICE`, keeping `.env`, mail, accounts, certificates, Git and task artifacts out of this context. All three Compose models provide the same additional context. For direct Dockerfile builds, pass `--build-context license_files=.` from the project root.
 
