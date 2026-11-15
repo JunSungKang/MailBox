@@ -1,5 +1,7 @@
 // Disposable native-architecture validation. Never selects operating services or volumes.
 import fs from "node:fs";
+import net from "node:net";
+import {verifyRegression} from "./regression.mjs";
 import path from "node:path";
 import crypto from "node:crypto";
 import assert from "node:assert/strict";
@@ -30,14 +32,16 @@ try {
   fs.chmodSync(fixture + "/tls/privkey.pem", 0o600); fs.writeFileSync(fixture + "/empty.env", "", { mode: 0o600 });
   const volumes = Object.fromEntries(["mail", "accounts", "queue", "auth", "data"].map(k => [k, { name: prefix + "-" + k }]));
   const tls = { type: "bind", source: fixture + "/tls", target: "/etc/mailbox/tls", read_only: true, bind: { create_host_path: false } };
+  const publicPort=await new Promise((resolve,reject)=>{const server=net.createServer();server.once('error',reject);server.listen(0,'127.0.0.1',()=>{const port=server.address().port;server.close(()=>resolve(port));});});
   const services = {
-    smtp: { image: images.smtp, environment: { MAIL_HOSTNAME: "fixture.test", MAIL_DOMAINS: "fixture.test", SMTP_AUTH_USER: env.SMTP_AUTH_USER }, volumes: ["mail:/var/mail/vhosts", "accounts:/accounts", "queue:/var/spool/postfix", "auth:/run/smtp-auth:ro", tls] },
+    ...(process.env.MAILBOX_BROWSER_CHECKS==='1'?{proxy: { image: `mailbox-webmail-proxy:${tag}`, depends_on:['web'], networks:['default','browser-edge'], environment:{MAIL_WEB_HOSTNAME:'fixture.test',MAIL_WEB_HTTPS_PORT:'443'}, ports:[`127.0.0.1:${publicPort}:443`], volumes:[tls] }}:{}),
+    smtp: { image: images.smtp, networks:{default:{aliases:['fixture.test']}}, environment: { MAIL_HOSTNAME: "fixture.test", MAIL_DOMAINS: "fixture.test", SMTP_AUTH_USER: env.SMTP_AUTH_USER }, volumes: ["mail:/var/mail/vhosts", "accounts:/accounts", "queue:/var/spool/postfix", "auth:/run/smtp-auth:ro", tls] },
     imap: { image: images.imap, volumes: ["mail:/var/mail/vhosts", "accounts:/accounts", "auth:/run/smtp-auth", tls] },
-    web: { image: images.web, environment: env, volumes: ["mail:/mailboxes:ro", "accounts:/accounts", "data:/app/data",
+    web: { image: images.web, networks:{default:{aliases:['webmail-ui','mailbox-webmail-ui']}}, environment: env, volumes: ["mail:/mailboxes:ro", "accounts:/accounts", "data:/app/data",
       { type: "bind", source: fixture + "/tls/ca.pem", target: "/tls/ca.pem", read_only: true },
       { type: "bind", source: root + "/tests/platform", target: "/checks", read_only: true }] }
   };
-  fs.writeFileSync(fixture + "/compose.json", JSON.stringify({ services, volumes, networks: { default: { name: prefix, internal: true } } }), { mode: 0o600 });
+  fs.writeFileSync(fixture + "/compose.json", JSON.stringify({ services, volumes, networks: { default: { name: prefix, internal: true }, "browser-edge":{name:prefix+"-edge"} } }), { mode: 0o600 });
   compose("config", "--quiet"); prepared = true; compose("up", "-d", "--pull", "never", "--no-build");
   const exec = (...args) => compose("exec", "-T", "--user", "5000:5000", "web", ...args);
   exec("node", "--input-type=module", "-e", 'for(let i=0;i<100;i++){try{if((await fetch("http://127.0.0.1:3000/signup")).status===200)process.exit(0)}catch{}await new Promise(r=>setTimeout(r,300));}process.exit(1)');
@@ -59,6 +63,12 @@ try {
     save("bootstrap-attempts.json", { status: "failed", attempts }); throw Error("Fixture bootstrap did not become ready");
   };
   await bootstrap();
+  if(process.env.MAILBOX_PROBE_JAVA_IMAGE){
+    const classes=fs.realpathSync(process.env.MAILBOX_PROBE_JAVA_CLASSES);assert(classes.startsWith(root+path.sep));
+    fs.writeFileSync(fixture+'/probe-password',env.SMTP_AUTH_PASSWORD,{mode:0o600});
+    docker(['run','--rm','--read-only','--user','0:0','--network',prefix,'--entrypoint','java','--env','PROBE_HOST=fixture.test','--env','PROBE_PORT=587','--env','PROBE_USER='+env.SMTP_AUTH_USER,'--mount',`type=bind,src=${classes},dst=/checks,readonly`,'--mount',`type=bind,src=${fixture}/tls/ca.pem,dst=/run/probe/ca.pem,readonly`,'--mount',`type=bind,src=${fixture}/probe-password,dst=/run/probe/password,readonly`,process.env.MAILBOX_PROBE_JAVA_IMAGE,'-cp','/checks','xyz.gg_jskang.mailbox.probe.ClientConnectionProbe']);
+    save('java-probe.json',{status:'success',consumerImage:process.env.MAILBOX_PROBE_JAVA_IMAGE,sourceCompatibility:17,mailCommandsIssued:false});
+  }
   const smtp = JSON.parse(exec("node", "/checks/smtp-check.mjs")); save("smtp.json", smtp);
   const delivered = JSON.parse(exec("node", "--input-type=module", "-e", `
     import fs from 'node:fs';import crypto from 'node:crypto';
@@ -95,6 +105,13 @@ try {
   exec("node", "--input-type=module", "-e", webCheck); await bootstrap();
   save("webmail-readback-after.json", readback());
   save("imap-after.json", JSON.parse(exec("env", "IMAP_CHECK_PHASE=after", "node", "/checks/imap-check.mjs")));
+  if(process.env.MAILBOX_BROWSER_CHECKS==='1') {
+    exec('node','--input-type=module','-e',`import fs from 'node:fs';const p='/app/data/mail/inbox/html-fixture';fs.mkdirSync(p+'/attachments',{recursive:true});fs.writeFileSync(p+'/meta.json',JSON.stringify({id:'html-fixture',box:'inbox',from:'fixture@fixture.test',to:['browser-user@fixture.test'],subject:'HTML fixture',date:new Date().toISOString(),attachments:[]}));fs.writeFileSync(p+'/body.txt','HTML fixture content');fs.writeFileSync(p+'/body.html','<html><body><h2>HTML fixture content</h2><script>parent.fixtureScriptRan=true</script></body></html>');`);
+    const port=publicPort;
+    const browserOutput=directory+'/reports/browser';fs.mkdirSync(browserOutput,{recursive:true});
+    execFileSync(process.execPath,[root+'/webmail-ui/node_modules/@playwright/test/cli.js','test'],{cwd:root+'/webmail-ui',stdio:'inherit',env:{...process.env,TMPDIR:directory+'/tmp',MAILBOX_BROWSER_URL:'https://127.0.0.1:'+port,MAILBOX_BROWSER_OUTPUT:browserOutput,FIXTURE_PASSWORD:env.FIXTURE_PASSWORD}});
+  }
+  if(process.env.MAILBOX_REGRESSION_CHECKS==='1') await verifyRegression({root,directory,prefix,fixture,compose,exec,docker,env,images});
   save("smoke.json", { status: "success", images, internalNetwork: true, untrustedPeerDeniedBeforeBootstrap: true,
     sourceOffer: true, signupWithoutCode: true, smtpAndImapTLS: true, passwordCompatibility: true, gracefulRestart: true,
     localDeliveryCount: delivered.messages, maildirContentVerified: true, imapCountUidFlagsPreserved: true, webmailImportAndBodyRead: true, externalRealMailSent: false });
@@ -114,6 +131,7 @@ try {
     if (execFileSync("docker", ["volume", "ls", "--filter", "name=^" + volume + "$", "--format", "{{.Name}}"], { encoding: "utf8" }).trim() === volume) docker(["volume", "rm", volume]);
   }
   if (execFileSync("docker", ["network", "ls", "--filter", "name=^" + prefix + "$", "--format", "{{.Name}}"], { encoding: "utf8" }).trim() === prefix) docker(["network", "rm", prefix]);
+  if(execFileSync('docker',['network','ls','--filter','name=^'+prefix+'-edge$','--format','{{.Name}}'],{encoding:'utf8'}).trim()===prefix+'-edge')docker(['network','rm',prefix+'-edge']);
   fs.rmSync(fixture, { recursive: true });
   save("fixture-cleanup.json", { status: "success", prefix, fixtureDataAndCredentialsRemoved: true });
 }

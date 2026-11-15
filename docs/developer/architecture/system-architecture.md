@@ -81,3 +81,7 @@ Track runtime modules, Compose definitions, maintained tooling and documentation
 The `platform` project in `compose.platform.yaml` owns the integrated production model. It references five existing external volumes. Diagnostic API access is loopback `20105`; normal API access uses `/api/` over HTTPS `20006`. The [transition record](../guides/ubuntu-platform-transition.md) documents migration, validation and distribution security-package assessment. Shared-edge installations have separate public URL mappings recorded in the later operational records.
 
 Maildir/drop MIME attachments stream with backpressure while preserving CID conversion and the import ledger. Metadata I/O is limited to 32 concurrent operations per request and Maildir sources to four. Webmail V8 old/semi spaces of 512/16 MiB, two proxy workers and upstream keepalive eight are defaults measured for the workload in the [performance record](../guides/performance-2026-11-11.md); use configuration overrides when tuning a different workload.
+
+## Modular implementation
+
+See [Modular Webmail](./modular-webmail.md) for the current backend services, common frontend components, namespace conventions, validation and recovery. Root runtime modules and `src/lib` retain compatibility exports; new code uses the documented service boundaries.

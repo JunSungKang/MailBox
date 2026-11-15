@@ -60,3 +60,7 @@ The compose handler submits mail to Postfix over the verified SMTP path and reco
 Public signup requires a user ID and an 8–128-character password; no signup code is required. Provisioning updates the Dovecot passwd-file and Postfix recipient map together in `mailbox-account-store`. New accounts use salted Argon2id; existing BLF-CRYPT hashes remain supported and are not rewritten. Webmail and IMAP share these credentials. NUL characters are not allowed.
 
 Legacy `users.json` IDs and existing recipient IDs remain reserved. Legacy users must prove ownership with their original password before migration; do not delete the legacy file to free an ID. Dedicated SMTP service IDs cannot be claimed through public signup. See [account operations and recovery](../docs/developer/guides/operation.md#accounts-and-recipient-addresses).
+
+## Modular implementation
+
+See [Modular Webmail](../docs/developer/architecture/modular-webmail.md) for the current backend services, common frontend components, namespace conventions, validation and recovery. Root runtime modules and `src/lib` retain compatibility exports; new code uses the documented service boundaries.

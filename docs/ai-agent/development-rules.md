@@ -14,7 +14,7 @@ Last updated: 2026-11-15
 
 - Each top-level module owns its Dockerfiles and configuration.
 - Root Compose owns service networks, ports, volumes and environment-variable assembly.
-- Webmail pages belong in `webmail-ui/src/app`; storage, audit and access rules belong in `webmail-ui/src/lib`; HTTP multipart and authentication endpoints belong in `webmail-ui/server.mjs`.
+- Webmail routes belong in `webmail-ui/src/app`; reusable UI in `src/components` and `src/features`; Next-only composition in `src/server`. Native services, policies, repositories, ingestion and HTTP adapters belong in `webmail-ui/backend`; `server.mjs` owns startup and graceful shutdown. Keep compatibility exports at documented runtime paths until their consumers migrate.
 - Apply the same signed-session and ownership checks to per-user lists, details, attachments and sending.
 - Never start production with a placeholder `WEBMAIL_SESSION_SECRET`. Signup is public with a user ID and password; no signup code is required. Do not bypass reserved SMTP service/recipient IDs or legacy account ownership verification.
 

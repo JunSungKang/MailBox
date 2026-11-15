@@ -41,6 +41,7 @@ RUN apt-get update && apt-get dist-upgrade -y \
 RUN mkdir -p /app/data/mail/inbox /app/data/mail/sent /app/data/mail/bounced /app/data/tmp /app/data/drop/inbox /app/data/drop/processed /app/data/drop/failed && chown -R nextjs:vmail /app/data
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/server.mjs ./server.mjs
+COPY --from=builder /app/backend ./backend
 COPY --from=builder /app/smtp-transport.mjs ./smtp-transport.mjs
 COPY --from=builder /app/smtp-bootstrap.mjs ./smtp-bootstrap.mjs
 COPY --from=builder /app/auth-core.mjs ./auth-core.mjs
