@@ -1,13 +1,14 @@
 {
-  "name": "mailbox-webmail-ui",
+  "name": "@gg-jskang/mailbox-webmail-ui",
   "version": "0.2.1",
   "private": true,
   "scripts": {
     "dev": "NODE_ENV=development node server.mjs",
     "build": "next build",
-    "test": "node --test auth-core.test.mjs password-core.test.mjs account-core.test.mjs account-store.test.mjs smtp-transport.test.mjs maildir-identity.test.mjs mail-import.test.mjs bounded-map.test.mjs source-link.test.mjs",
+    "test": "node --test --test-timeout=30000 *.test.mjs tests/backend/*.test.mjs",
     "smtp:provision": "node smtp-bootstrap.mjs",
-    "start": "NODE_ENV=production node server.mjs"
+    "start": "NODE_ENV=production node server.mjs",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "bcryptjs": "3.0.2",
@@ -20,6 +21,7 @@
     "react-dom": "19.2.5"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@types/busboy": "1.5.4",
     "@types/mailparser": "3.4.6",
     "@types/node": "24.12.2",
@@ -41,5 +43,6 @@
   "homepage": "https://github.com/JunSungKang/MailBox",
   "bugs": {
     "url": "https://github.com/JunSungKang/MailBox/issues"
-  }
+  },
+  "type": "module"
 }

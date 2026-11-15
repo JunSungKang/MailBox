@@ -29,8 +29,10 @@ docs/developer  -> human developer guidance and operational knowledge
 
 ```text
 Docker Compose -> module public runtime surface
-webmail-ui/src/app -> webmail-ui/src/lib
-webmail-ui/server.mjs -> auth-core.mjs + filesystem + SMTP transport
+webmail-ui/src/app -> src/server -> backend/application
+webmail-ui/src/app -> src/features + src/components + pure view models
+webmail-ui/server.mjs -> backend/bootstrap -> backend/http -> backend/application
+backend/application -> domain + infrastructure contracts
 smtp-receiver -> mailbox-store <- imap-mailbox
 webmail-ui -> mailbox-store (read-only import)
 webmail-ui -> smtp-receiver (SMTP submission)
@@ -68,3 +70,7 @@ SMTP and IMAP must not import Webmail internals; Webmail must not modify Postfix
 ## Platform Runtime
 
 Production uses the `platform` Compose project and `mailbox-*` services. All four runtimes use Ubuntu 26.04. Webmail and SMTP accept the same Ubuntu Node.js 24 base through the `NODE_IMAGE` argument. Preserve all five existing external named volumes; do not recursively change their ownership. Standard internal ports are SMTP 25, submission 587, IMAP 143 and proxy 80/443. Remove compatibility ports 2525/2587, `mailbox_default` connectivity and old Web URLs only in a separate task after consumers have migrated.
+
+## Modular Webmail
+
+Follow [Modular Webmail](../developer/architecture/modular-webmail.md) for runtime, server/client boundaries, package identity, test commands and rollback. Keep the Next-only `server-only` bridge out of native Node modules. Preserve the single SSR ingestion writer and explicit Docker copies.

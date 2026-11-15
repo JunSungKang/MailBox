@@ -1,3 +1,5 @@
+package xyz.gg_jskang.mailbox.probe;
+
 // Read-only protocol probe. Run in a disposable container with the consumer's
 // exact image/network namespace and read-only CA/password file mounts.
 // It never issues MAIL, RCPT or DATA and never prints credentials/responses.
