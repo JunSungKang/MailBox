@@ -1,55 +1,53 @@
 # MailBox Onboarding
 
-문서 최신화 기준일: 2026-11-04
+Last updated: 2026-11-15
 
 ## Project Summary
 
-이 프로젝트는 세 핵심 모듈로 동작하는 단일 노드 메일 서버다. Postfix가 SMTP 메일을 Maildir에 배달하고, Dovecot과 Next.js Webmail이 같은 메일 데이터를 각자의 인터페이스로 제공한다. 운영 실행은 Nginx HTTPS 프록시를 더해 네 컨테이너를 사용한다.
+MailBox is a single-node mail server with three core modules. Postfix delivers SMTP messages into Maildir; Dovecot and Next.js Webmail expose the same original mail through their respective interfaces. Production adds an Nginx HTTPS proxy, for four containers in total.
 
 ## Stack
 
-- SMTP: Ubuntu 26.04 Postfix (배포판 보안 backport 적용) (Node.js는 비권한 계정 맵 감시기만 실행)
-- IMAP: Dovecot 2.4 on Ubuntu 26.04 (Maildir 저장 형식은 2.3 호환 유지)
-- Webmail: Node.js 24, Next.js 16, React 19, TypeScript 6
-- Mail parsing/sending: `mailparser`, `nodemailer`, `busboy`
-- 운영 Webmail HTTPS: Nginx
-- Runtime composition: Docker Compose (`platform`, `compose.platform.yaml`), Docker Bake
+- SMTP: Ubuntu 26.04 Postfix with distribution security backports; Node.js runs only the unprivileged account-map watcher.
+- IMAP: Dovecot 2.4 on Ubuntu 26.04, retaining a Dovecot 2.3-compatible storage/index version.
+- Webmail: Node.js 24, Next.js 16, React 19, TypeScript 6.
+- Mail parsing/sending: `mailparser`, `nodemailer`, `busboy`.
+- Production Webmail HTTPS: Nginx.
+- Composition: Docker Compose (`platform`, `compose.platform.yaml`) and Docker Bake.
 
 ## Directory Ownership
 
-- `smtp-receiver`: `main.cf`, 수신 주소 map, container entrypoint.
+- `smtp-receiver`: `main.cf`, recipient maps, container entrypoint.
 - `imap-mailbox`: `dovecot.conf`, IMAP users, container entrypoint.
-- `webmail-ui`: App Router 화면, custom Node server, 메일 파일 저장소와 인증.
-- `docker-compose.yml`: 소스 build 기반 개발 실행.
-- `compose.platform.yaml`: Ubuntu 네 서비스 통합 운영.
-- `docker-bake.hcl`: 공통 Node24 기반과 네 이미지 빌드.
-- `docker-compose.prod.yml`: 이전 실행 구성과 복구 참고.
-- `docs/ai-agent`: agent 작업 규칙.
-- `docs/developer`: 개발자 온보딩과 운영 지식.
+- `webmail-ui`: App Router pages, custom Node server, mail file storage and authentication.
+- `docker-compose.yml`: source-built development model.
+- `compose.platform.yaml`: integrated four-service Ubuntu production model.
+- `docker-bake.hcl`: shared Node.js 24 base and four image builds.
+- `docker-compose.prod.yml`: previous execution model and rollback reference.
+- `docs/ai-agent`: agent work rules.
+- `docs/developer`: developer onboarding and operational knowledge.
 
 ## Commands
 
 ```bash
-# 새 설치에서만 .env.example로 환경 파일을 준비한다. 기존 .env는 보존한다.
-# 설치 안내에 따라 보안 값과 MAIL_TLS_DIR의 인증서를 준비한다.
+# Prepare .env from .env.example only for a new installation; preserve an existing .env.
+# Follow the installation guide to configure secrets and certificates in MAIL_TLS_DIR.
 docker buildx bake
 docker compose --env-file .env -f compose.platform.yaml config --quiet
-docker compose ps
+docker compose -f compose.platform.yaml ps
 npm test --prefix webmail-ui
 npm run build --prefix webmail-ui
 ```
 
-실제 교체는 공유 잠금·백업·복구 gate를 포함한 [전환 절차](../guides/ubuntu-platform-transition.md)를 따른다. 인증서·네트워크 준비와 운영 HTTPS 실행은 [설치 안내](../guides/installation.md)를 따른다. 화면은 밝은 미래 우편함인 “내일의 우편함” 테마를 사용한다.
+For actual replacement, follow the [transition procedure](../guides/ubuntu-platform-transition.md), including shared locking, backup and recovery gates. See [installation](../guides/installation.md) for certificates, networks and production HTTPS. The UI uses the bright, future-inspired “Tomorrow's Mailbox” theme.
 
 ## Webmail Entry Points
 
-- `webmail-ui/server.mjs`: HTTP server, login/signup/logout, multipart send, attachment download.
-- `webmail-ui/auth-core.mjs`: HMAC session 생성·검증의 공용 구현.
-- `webmail-ui/src/app`: inbox, sent, bounced, compose, login, signup, detail UI.
-- `webmail-ui/src/lib/mailStore.ts`: Maildir import와 Webmail 파일 저장소.
-- `webmail-ui/src/lib/mailAccess.ts`: 사용자별 메시지 소유권 판정.
-- `webmail-ui/src/lib/auditLogger.ts`: 구조화 감사 로그.
+- `webmail-ui/server.mjs`: HTTP server, login/signup/logout, multipart submission, attachment download.
+- `webmail-ui/auth-core.mjs`: shared HMAC session creation and verification.
+- `webmail-ui/src/app`: inbox, sent, bounced, compose, login, signup and detail pages.
+- `webmail-ui/src/lib/mailStore.ts`: Maildir import and Webmail file storage.
+- `webmail-ui/src/lib/mailAccess.ts`: per-user message ownership.
+- `webmail-ui/src/lib/auditLogger.ts`: structured audit logging.
 
-구조와 데이터 흐름의 상세 내용은 [System Architecture](../architecture/system-architecture.md)를 기준으로 확인한다.
-
-통합 빌드와 전환은 [Ubuntu platform 전환](../guides/ubuntu-platform-transition.md)을 따른다.
+[System Architecture](../architecture/system-architecture.md) describes structure and data flow. The [Ubuntu platform transition](../guides/ubuntu-platform-transition.md) records integrated builds and migration.
