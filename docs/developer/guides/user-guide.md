@@ -1,37 +1,35 @@
-# MailBox 사용자 안내
+# MailBox User Guide
 
-## 웹메일 접속
+## Webmail Access
 
-운영 Webmail은 `https://<MAIL_WEB_HOSTNAME>:20006`에서 접속한다. 포트는 `MAIL_WEB_HTTPS_PORT` 값을 따르며 HTTP `20005`은 HTTPS로 이동한다. 로컬 CA를 사용하는 설치는 운영자가 제공한 공개 CA 인증서를 접속 기기에 신뢰 등록해야 한다. 개발 실행은 `http://localhost:18080`을 사용한다.
+Standalone production Webmail is available at `https://<MAIL_WEB_HOSTNAME>:20006`; HTTP `20005` redirects to HTTPS. Older models can use `MAIL_WEB_HTTPS_PORT`, while shared-edge installations have their own public mapping. Ask the operator for the actual URL. With a local CA, trust the operator-provided public CA certificate on your device. Development Compose uses `http://localhost:18080`.
 
-화면은 밝은 진주색, 민트·라벤더 빛과 반투명 패널로 구성한 **내일의 우편함** 테마를 사용한다. 로그인 화면의 문구는 “내일이 먼저 말을 걸어오는 곳”이며, 메일 목록의 날짜는 실제 수신·발송 시간을 표시한다. 기기의 동작 줄이기 설정을 켜면 장식 효과의 움직임이 줄어든다.
+The “Tomorrow's Mailbox” theme uses bright pearl, mint and lavender colors with translucent panels. Its login tagline means “Where tomorrow speaks to you first.” Message dates are actual receiving/sending timestamps. Enabling reduced motion on your device reduces decorative animation. The current interface is Korean; the descriptions below translate its controls into English.
 
-사용할 사용자 ID와 8~128자의 비밀번호로 계정을 만든다. 가입 코드는 필요하지 않다. 이미 사용 중인 메일 주소와 SMTP 서비스용 아이디는 일반 가입으로 가져갈 수 없다. 한글 비밀번호도 바이트 수로 길이를 줄이지 않는다. Webmail·IMAP·SMTP가 같은 비밀번호를 사용하므로 인증 형식에서 허용하지 않는 NUL(널) 문자는 사용할 수 없다. 사용자 ID는 `.` 또는 `..`로 지정할 수 없다. 가입이 완료되면 Webmail·IMAP 로그인 계정과 운영자가 허용한 domain의 SMTP 수신 주소가 함께 생성된다.
+Create an account with your chosen user ID and an 8–128-character password. No signup code is required. Public signup cannot claim an existing address or a reserved SMTP service ID. Non-ASCII passwords are not shortened according to their UTF-8 byte count. Webmail and IMAP share credentials; NUL characters are prohibited by the shared authentication format. User IDs `.` and `..` are invalid. Successful signup creates Webmail/IMAP access and SMTP receiving addresses for the operator's allowed domains.
 
-이전 `users.json` 계정은 같은 ID와 기존 비밀번호로 다시 가입해야 이전할 수 있다. 기존 비밀번호를 증명하지 못하면 다른 사용자의 기존 ID를 사용할 수 없다. 기존 비밀번호가 8~128자 범위를 벗어나거나 NUL 문자를 포함하거나 계정 정보가 손상된 경우 운영자에게 소유권 확인을 거친 이전을 요청한다. 이미 Dovecot 계정으로 전환한 사용자의 로그인과 비밀번호는 유지된다.
+Legacy `users.json` users must sign up again with the same ID and original password. An ID cannot be claimed without proof of ownership. If the original password is outside 8–128 characters, contains NUL, or the account record is damaged, ask an operator for ownership-verified recovery. Accounts already migrated to Dovecot retain their login and password.
 
-## 메일함
+## Mailboxes
 
-- `받은 편지`: 수신 메일
-- `보낸 편지`: 웹메일에서 발송한 메일
-- `돌아온 편지`: 반송 또는 실패 메일
+- **Inbox**: received messages.
+- **Sent**: messages sent through Webmail.
+- **Returned mail**: bounced or failed messages.
 
-## 메일 작성
+## Compose
 
-`편지 쓰기` 화면에서 수신자, 제목, 본문을 입력하고 발송한다. domain을 생략한 수신자는 `MAIL_DEFAULT_DOMAIN`이 붙는다. 발신 주소는 로그인 사용자와 기본 domain으로 고정된다.
+Enter recipients, subject and body on the compose page, then send. Recipients without a domain receive `MAIL_DEFAULT_DOMAIN`. The sender is fixed to the logged-in user and default domain.
 
-## IMAP 접속
+## IMAP Access
 
-기본 IMAP 접속 정보는 다음과 같다.
+- Server: the installation's mail hostname.
+- Port: `143`.
+- Connection security: `STARTTLS`, TLS 1.2 or later.
+- Username: the user ID registered in Webmail.
+- Password: the password chosen at signup.
 
-- 서버: 설치 서버 주소
-- 포트: `143`
-- 연결 보안: `STARTTLS` (TLS 1.2 이상)
-- 사용자: Webmail에서 가입한 사용자 ID
-- 비밀번호: Webmail 가입 시 설정한 비밀번호
+Log in only after STARTTLS. The configured server address must match a domain or IP in the certificate. SMTP `25` is for server-to-server reception; users send through Webmail's compose page. Ordinary IMAP credentials do not grant the dedicated application's SMTP relay permission.
 
-STARTTLS 연결 후 로그인한다. 메일 클라이언트의 서버 주소는 인증서에 포함된 domain 또는 IP와 일치해야 한다. SMTP `25`는 서버 간 수신용이며, 편지는 Webmail의 `편지 쓰기`에서 발송한다.
+Outgoing SMTP requires encryption and server-certificate verification. Delivery may be delayed when a destination does not support this policy; the operator must inspect the queue. A successful Webmail submission means Postfix accepted the message, not that the destination delivered it.
 
-메일은 암호화와 서버 인증서 검증을 통과한 SMTP 경로로 발송한다. 상대 메일 서버가 이를 지원하지 않으면 지연될 수 있으며 운영자가 큐 상태를 확인해야 한다. Webmail의 “접수 완료”는 Postfix 접수를 뜻하며 상대편 최종 배달 보장은 아니다.
-
-통합 Ubuntu 이미지의 빌드·공유 잠금·실제 볼륨·호환 endpoint·복구 절차는 [Ubuntu platform 전환](ubuntu-platform-transition.md)을 따른다. 이전 `docker-compose*.yml`은 이전 commit과 이미지로 복구할 때의 구성이다.
+The [Ubuntu platform transition](ubuntu-platform-transition.md) covers builds, shared locking, real volumes, compatibility endpoints and rollback. Older `docker-compose*.yml` models are recovery references for their corresponding older commits/images.
