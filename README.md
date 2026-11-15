@@ -6,7 +6,7 @@
 [![Version](https://img.shields.io/badge/version-0.2.1-green.svg)](VERSION)
 [![Containers](https://github.com/JunSungKang/MailBox/actions/workflows/publish-containers.yml/badge.svg?branch=main)](https://github.com/JunSungKang/MailBox/actions/workflows/publish-containers.yml)
 
-MailBox는 Postfix, Dovecot, Next.js 웹메일을 Docker로 구성한 단일 호스트용 메일 서버입니다. 웹에서 계정을 만들고 편지를 읽거나 보내며, IMAP 클라이언트로 같은 원본 메일함에 접속할 수 있습니다.
+MailBox is a single-host mail server that combines Postfix, Dovecot and Next.js Webmail in Docker. Create an account, read and send mail in the browser, or access the original mailbox through an IMAP client.
 
 ## Contents
 
@@ -14,48 +14,50 @@ MailBox는 Postfix, Dovecot, Next.js 웹메일을 Docker로 구성한 단일 호
 
 ## Features
 
-- SMTP 수신·Maildir 배달·IMAP STARTTLS·웹메일 조회·작성·첨부파일
-- 아이디와 8~128자 비밀번호로 공개 가입, 기존 계정·메일 주소 소유권 보호
-- 신규 Argon2id 해시와 기존 BLF-CRYPT 계정 호환
-- 발송의 필수 STARTTLS·CA/호스트 검증·전용 SASL 인증
-- 사용자별 메일·첨부 접근 검사와 비밀값을 제외한 JSON Lines 감사 로그
-- 첨부 스트리밍과 제한된 파일 I/O 동시성, 조정 가능한 메모리·worker 설정
-- Ubuntu 26.04 런타임과 공통 Node.js 24 기반 웹메일·SMTP 도구
+- SMTP reception, Maildir delivery, IMAP STARTTLS, Webmail, message composition and attachments.
+- Public signup with a user ID and an 8–128-character password, with protection for existing accounts and address ownership.
+- Salted Argon2id for new accounts and compatibility with existing BLF-CRYPT hashes.
+- Mandatory STARTTLS, CA/hostname verification and dedicated SASL authentication for application submission.
+- Per-user message and attachment authorization, with JSON Lines audit logs that exclude secrets.
+- Streaming attachments, bounded file I/O concurrency and configurable memory/worker settings.
+- Ubuntu 26.04 runtimes and a shared Node.js 24 base for Webmail and SMTP tooling.
 
 ## Architecture
 
 ```text
-외부 SMTP → Postfix → Maildir 원문 ─┬→ Dovecot → IMAP 클라이언트
-                                  └→ 웹메일 가져오기 → 본문·메타·첨부 파일
-브라우저 → HTTPS proxy → 웹메일
-웹메일 → 검증된 STARTTLS + SASL → Postfix → 상대 메일 서버
+Internet SMTP -> Postfix -> original Maildir -+-> Dovecot -> IMAP client
+                                            +-> Webmail import -> body/metadata/attachments
+Browser -> HTTPS proxy -> Webmail
+Webmail -> verified STARTTLS + SASL -> Postfix -> destination mail server
 ```
 
-메일은 Docker named volume에 파일로 저장하며 별도 관계형 DB는 필요하지 않습니다.
+Messages are stored as files in Docker named volumes. No separate relational database is required.
 
-| 볼륨 | 용도 |
+| Volume | Purpose |
 | --- | --- |
-| `mailbox-store` | 사용자별 Maildir 원문과 IMAP 상태 |
-| `webmail-data-store` | 웹 조회용 본문·메타·첨부, 보낸메일 |
-| `mailbox-account-store` | 계정 해시·수신 주소 원본 |
-| `smtp-queue-store` | 처리·배달 대기 큐 |
-| `smtp-auth-store` | SMTP/IMAP 인증 소켓 공유 |
+| `mailbox-store` | Per-user original Maildirs and IMAP state |
+| `webmail-data-store` | Webmail bodies, metadata, attachments and sent mail |
+| `mailbox-account-store` | Account hashes and authoritative recipient maps |
+| `smtp-queue-store` | Processing and delivery queues |
+| `smtp-auth-store` | Shared SMTP/IMAP authentication socket |
 
-## Container packages
+## Container Packages
 
-레지스트리 호환성을 위해 기존 `mail-server-*` 이름과 `v0.1.x`·`v0.2.0` 태그를 유지합니다. 현재 패치 릴리스는 `v0.2.1`이며, `latest`만 새 릴리스를 가리키도록 이동합니다. 버전 태그와 `sha-<전체 SHA>` 태그는 기존 digest를 보존하므로 특정 버전 사용과 복구에는 이 태그나 digest를 지정하세요. `v0.2.0`은 Ubuntu 전환·메모리 최적화·코드 없는 가입·계정 경계 보호를 포함합니다. 기존 버전에서 전환할 때는 [데이터·UID/GID·TLS·복구 절차](docs/developer/guides/ubuntu-platform-transition.md)를 먼저 확인하세요.
+The existing `mail-server-*` registry names are retained for compatibility. The current patch release is `v0.2.1`. Version and `sha-<full-commit-SHA>` tags are immutable under the publisher; only `latest` moves to a new release. Pin a version or digest for deployment and rollback. The November 15 `v0.2.0` build introduced the Ubuntu transition, memory improvements, signup without invitation codes and account-boundary protections. Review the [data, UID/GID, TLS and rollback procedure](docs/developer/guides/ubuntu-platform-transition.md) before upgrading an older installation.
 
-| 서비스 | 이미지 | 패키지 |
+| Service | Image | Package Versions |
 | --- | --- | --- |
-| SMTP | `ghcr.io/junsungkang/mail-server-smtp-receiver:v0.2.1` | [Versions](https://github.com/users/JunSungKang/packages/container/package/mail-server-smtp-receiver) |
-| IMAP | `ghcr.io/junsungkang/mail-server-imap-mailbox:v0.2.1` | [Versions](https://github.com/users/JunSungKang/packages/container/package/mail-server-imap-mailbox) |
-| 웹메일 | `ghcr.io/junsungkang/mail-server-webmail-ui:v0.2.1` | [Versions](https://github.com/users/JunSungKang/packages/container/package/mail-server-webmail-ui) |
+| SMTP | `ghcr.io/junsungkang/mail-server-smtp-receiver:v0.2.1` | [Versions](https://github.com/JunSungKang/MailBox/pkgs/container/mail-server-smtp-receiver/versions) |
+| IMAP | `ghcr.io/junsungkang/mail-server-imap-mailbox:v0.2.1` | [Versions](https://github.com/JunSungKang/MailBox/pkgs/container/mail-server-imap-mailbox/versions) |
+| Webmail | `ghcr.io/junsungkang/mail-server-webmail-ui:v0.2.1` | [Versions](https://github.com/JunSungKang/MailBox/pkgs/container/mail-server-webmail-ui/versions) |
 
-릴리스는 `linux/amd64`·`linux/arm64`를 제공합니다. `latest`는 검증된 main 릴리스, `sha-<전체 커밋 SHA>`는 해당 소스 버전입니다. 운영에서는 버전 또는 digest를 고정해 사용하세요. 실제 게시 상태와 digest는 workflow 결과에서 확인합니다. [빌드·검증·게시 안내](docs/developer/guides/container-packages.md)를 참고하세요.
+Releases provide `linux/amd64` and `linux/arm64`. `latest` identifies the validated main release; `sha-<full-commit-SHA>` identifies its source revision. Check the publication workflow's final digests rather than assuming a mutable tag identifies a particular build. See the [build, validation and publication guide](docs/developer/guides/container-packages.md).
 
-## Getting started
+The pre-publication baseline and subsequent checks confirmed that the visible `v0.1.x` tags and November 15 `v0.2.0` digests were preserved during `v0.2.1` publication. These checks do not establish the identity or restoration of a reported months-old `0.2.0` image; that historical original has not been identified.
 
-필요 환경은 Docker Engine/Desktop, Compose 2.17 이상, Buildx/Bake, DNS·TLS 인증서와 메일 송수신을 허용하는 네트워크입니다. 아래는 소스 빌드와 설정 검증 단계입니다.
+## Getting Started
+
+Requirements: Docker Engine/Desktop, Compose 2.17 or later, Buildx/Bake, DNS and TLS certificates, and a network that permits mail traffic. Standalone Bake defaults to `linux/arm64`; explicitly override its target platforms for AMD64, or use the published multi-platform images. Prepare the source and configuration:
 
 ```bash
 git clone https://github.com/JunSungKang/MailBox.git mail-box
@@ -63,27 +65,27 @@ cd mail-box
 cp .env.example .env
 ```
 
-[설치 안내](docs/developer/guides/installation.md)에 따라 세션 secret·SMTP 자격·domain·인증서와 공개 CA를 설정합니다. 신규 설치에서는 다섯 external volume의 소유권과 `platform_default`·호환 네트워크 준비가 필요합니다. 기존 `.env`·메일·계정·큐·인증서는 보존합니다.
+Follow the [installation guide](docs/developer/guides/installation.md) to configure the session secret, SMTP credentials, domains, server certificates and public CA bundle. A new installation also needs ownership prepared for five external volumes and the `platform_default` and compatibility networks. Preserve an existing `.env`, messages, accounts, queues and certificates.
 
 ```bash
 docker buildx bake -f docker-bake.hcl
 docker compose --env-file .env -f compose.platform.yaml config --quiet
 ```
 
-실제 기동·교체는 [운영 안내](docs/developer/guides/operation.md)의 잠금·백업·서비스 선택·검증·복구 절차를 따릅니다. 게시 이미지를 사용하려면 해당 Compose 서비스 image를 위 주소로 지정합니다. HTTPS는 공통 gateway 또는 함께 제공된 proxy Dockerfile로 구성합니다.
+For actual startup or replacement, follow the [operating procedure](docs/developer/guides/operation.md), including locking, backup, explicit service selection, validation and rollback. To use published images, set the corresponding Compose service images to the addresses above. Configure HTTPS with a shared gateway or the supplied proxy Dockerfile.
 
-| 경로 | standalone Compose 기본값 |
+| Endpoint | Standalone Compose Default |
 | --- | --- |
-| 웹 HTTP / HTTPS | `20005:80` / `20006:443` |
-| API | 같은 HTTPS의 `/api/`; 진단만 `127.0.0.1:20105` |
-| SMTP / IMAP | `25` STARTTLS / `143` 필수 STARTTLS |
-| 앱 SMTP 제출 | 내부 `587`; 전환용 `2587` 유지 |
+| Web HTTP / HTTPS | `20005:80` / `20006:443` |
+| API | `/api/` on the same HTTPS endpoint; diagnostic access only at `127.0.0.1:20105` |
+| SMTP / IMAP | `25` with STARTTLS / `143` with mandatory STARTTLS |
+| Application submission | Internal `587`; compatibility `2587` retained during transition |
 
-공통 edge를 사용하는 설치는 공개 URL이 다를 수 있습니다. 기존 `2525`/`2587` 소비자 연결과 볼륨 유지 방법은 전환 문서에 있습니다.
+Installations using a shared edge may have different public URLs. The transition guide describes compatibility for existing `2525`/`2587` consumers and preservation of all five volumes.
 
 ## Development
 
-Node.js 24의 `crypto.argon2` 지원 버전을 사용합니다. 배포 버전은 Dockerfile에 고정합니다.
+Use Node.js 24 with native `crypto.argon2` support. Dockerfiles pin the deployed version.
 
 ```bash
 cd webmail-ui
@@ -92,33 +94,33 @@ npm test
 npm run build
 ```
 
-SMTP·IMAP·웹메일의 격리 검증은 [tests/platform](tests/platform/README.md), 패키지 검증은 [게시 안내](docs/developer/guides/container-packages.md)를 참고하세요. fixture는 전용 계정·네트워크·볼륨과 로컬 메일만 사용합니다.
+See [tests/platform](tests/platform/README.md) for isolated SMTP/IMAP/Webmail validation and the [container guide](docs/developer/guides/container-packages.md) for package checks. Fixtures use dedicated accounts, networks, volumes and local mail only.
 
 ```text
-smtp-receiver/   Postfix 설정과 계정 map 감시기
-imap-mailbox/    Dovecot 설정과 Maildir 접근
-webmail-ui/      Next.js 화면, 인증, 파일 저장과 발송
-platform/       Ubuntu 기반 공통 Node 빌드
-tests/          단위·격리·패키지 검증
-docs/           설치·운영·아키텍처
+smtp-receiver/   Postfix configuration and account-map watcher
+imap-mailbox/    Dovecot configuration and Maildir access
+webmail-ui/      Next.js UI, authentication, file storage and submission
+platform/       Ubuntu-based shared Node image build
+tests/          Unit, isolated platform and package validation
+docs/           Installation, operations and architecture
 ```
 
 ## Documentation
 
-- [문서 시작점](docs/README.md) · [개발자 온보딩](docs/developer/README.md)
-- [시스템 아키텍처](docs/developer/architecture/system-architecture.md)
-- [설치](docs/developer/guides/installation.md) · [운영](docs/developer/guides/operation.md) · [장애 대응](docs/developer/guides/troubleshooting.md)
-- [사용자 안내](docs/developer/guides/user-guide.md)
-- [메모리·성능 검증](docs/developer/guides/performance-2026-11-11.md) · [가입·계정 보호](docs/developer/guides/open-signup-2026-11-15.md)
+- [Documentation index](docs/README.md) · [Developer guide](docs/developer/README.md)
+- [System architecture](docs/developer/architecture/system-architecture.md)
+- [Installation](docs/developer/guides/installation.md) · [Operation](docs/developer/guides/operation.md) · [Troubleshooting](docs/developer/guides/troubleshooting.md)
+- [User guide](docs/developer/guides/user-guide.md)
+- [Memory and performance](docs/developer/guides/performance-2026-11-11.md) · [Signup and account protection](docs/developer/guides/open-signup-2026-11-15.md)
 
 ## Contributing
 
-버그·기능 제안은 [Issues](https://github.com/JunSungKang/MailBox/issues), 코드 기여는 Pull Request로 받습니다. 변경 범위·재현 방법·검증 결과를 함께 적어 주세요. [기여 안내](CONTRIBUTING.md)와 [작업 규칙](AGENTS.md)을 확인하세요.
+Report bugs and feature proposals through [Issues](https://github.com/JunSungKang/MailBox/issues), and submit code contributions through pull requests. Include the scope, reproduction steps and validation results. Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Maintain documentation and release notes in English.
 
-메일 본문·자격·토큰·계정 데이터·개인키는 공개 Issue, 로그, PR에 포함하지 않습니다. TLS·소유권·데이터 보존은 변경 시 확인해야 하는 계약입니다.
+Never include message bodies, credentials, tokens, account data or private keys in public issues, logs or PRs. TLS, ownership and data preservation are contracts that every relevant change must verify.
 
 ## License
 
-**GNU Affero General Public License v3.0 only — `AGPL-3.0-only`.** 전체 조건은 [LICENSE](LICENSE), 저작권과 외부 구성요소 고지는 [NOTICE](NOTICE)에 있습니다. MailBox 소스·빌드 정의에 적용하며 외부 의존성과 운영체제 패키지는 각 라이선스를 유지합니다.
+**GNU Affero General Public License v3.0 only — `AGPL-3.0-only`.** See [LICENSE](LICENSE) for the full terms and [NOTICE](NOTICE) for copyright and third-party notices. This applies to MailBox source and build definitions; external dependencies and operating-system packages retain their respective licenses.
 
-게시 이미지에는 라이선스와 source revision이 포함됩니다. 웹 화면의 **소스코드** 링크는 해당 revision의 공개 소스 archive를 제공합니다. 수정 버전을 배포할 때도 대응하는 소스와 빌드·설치 정보를 제공하세요.
+Published images include the license and source revision. The Webmail footer's source-code link provides a public source archive for that exact revision. Distributors of modified versions must also provide the corresponding source and build/installation information as required by the license.

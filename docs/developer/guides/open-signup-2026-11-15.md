@@ -1,53 +1,55 @@
-# 가입 코드 없는 회원가입 전환
+# Signup Without Invitation Codes
 
-2026-11-15부터 회원가입은 사용자 ID와 비밀번호로 공개 제공한다. 가입 화면의 코드 입력란, 서버의 코드 비교와 시작 시 코드 필수 검사를 제거했다. 신규 비밀번호는 기존과 같이 8~128자이고 NUL 문자는 사용할 수 없다. SMTP 서비스용 ID와 기존 recipient local-part는 공개 가입에서 예약한다. 서비스 ID는 실제 loopback 연결과 설정된 서비스 비밀번호를 모두 증명한 내부 bootstrap만 생성할 수 있다. 전달 헤더는 이 권한을 주지 않는다. 원래 비밀번호를 증명한 이전 계정의 shared Maildir 경로 이전은 계속 허용한다. 기존 ID의 중복 가입, 이전 `users.json` 계정의 원래 비밀번호 확인, 계정 파일의 잠금·원자적 갱신·복구 journal은 유지한다. 가입·로그인 성공과 실패 및 서비스 ID 거부는 JSON Lines 감사 이벤트로 기록하며 비밀번호와 세션 값은 기록하지 않는다.
+As of 2026-11-15, signup is public with a user ID and password. The signup code field, server comparison and startup code requirement were removed. New passwords retain the 8–128-character policy and prohibit NUL. Dedicated SMTP IDs and existing recipient local parts remain reserved. Only internal bootstrap proving both a real loopback connection and the configured service password can create the service ID; forwarded headers grant no authority. Legacy users proving their original password may still migrate a shared Maildir delivery path. Duplicate-ID protection, original-password verification for legacy `users.json`, account-file locking, atomic updates and recovery journals remain. JSON Lines audit events record signup/login success, failure and service-ID rejection without passwords or session values.
 
-세 Compose 정의와 `.env.example`, SMTP 계정 bootstrap에서 `WEBMAIL_SIGNUP_TOKEN` 의존성을 제거했다. 기존 환경 파일에 이 값이 남아 있어도 새 코드에서는 사용하지 않는다. `WEBMAIL_SESSION_SECRET`, SMTP 서비스 자격, TLS/CA 검증, `Secure`·`HttpOnly`·`SameSite=Lax` cookie는 그대로 사용한다. 기존 계정과 비밀번호 hash를 변환하거나 재설정하지 않는다.
+The three Compose definitions, `.env.example` and SMTP bootstrap no longer depend on `WEBMAIL_SIGNUP_TOKEN`. An old environment value is ignored. `WEBMAIL_SESSION_SECRET`, SMTP service credentials, TLS/CA verification and `Secure`/`HttpOnly`/`SameSite=Lax` cookies remain. Existing accounts and hashes are neither converted nor reset.
 
-## 검증
+This is a historical rollout record; the values below describe the recorded deployment rather than a fresh deployment or scan performed during translation.
 
-- Ubuntu 26.04.1 / Node 24.22.2 최종 이미지의 production Next build와 단위 테스트49개 통과.
-- 전용 `internal` 네트워크와 synthetic account/data 볼륨에서 가입 검사37개와 정상 종료·재시작 후22개 통과. 운영 데이터는 mount하지 않았다. 별도 컨테이너 peer가 정확한 서비스 비밀번호와 위조된 loopback 전달 헤더를 보내도 서비스 계정 생성 전에 거부되는 것을 추가 확인했다. alias·자신의 경로를 가진 orphan·과거 domain 주소 선점 거부와 내부 bootstrap, 원래 비밀번호로 증명한 legacy 경로 이전도 확인했다.
-- 코드 환경변수와 form field가 없는 상태에서 가입, 8자·128자 한글 비밀번호, 로그인, 잘못된 비밀번호·길이·NUL·ID 거부, 중복 가입에 의한 hash 변경 거부, 기존 ID 탈취 거부, 기존 비밀번호를 증명한 이전 계정 전환, `Secure` 서명 세션을 확인했다.
-- 가입·로그인 성공/실패 감사 이벤트와 테스트 자격의 로그 미포함을 확인했다. 검사 helper가 stdout만 읽어 WARN 이벤트를 놓친 첫 시도는 stdout/stderr를 함께 수집해 재검증했다. 애플리케이션 수정은 추가하지 않았다.
-- 세 Compose를 코드 환경변수 없이 해석했다. `tests/platform/signup-check.mjs`는 fixture 전용 gate와 domain 검사를 통과한 격리 환경에서만 실행한다.
-- 최종 이미지 archive→manifest→config digest와 Trivy 검사 결과를 대조했다. Trivy0.76.2의 DB는2026-11-15 04:00 KST 갱신판이며 HIGH0/CRITICAL0이다. 남은 원시 행은 MEDIUM17/LOW4/UNKNOWN1, 고유 CVE12개다.22행 중21행에는 수정 버전이 제시되지 않았다. 남은 항목을 해결된 것으로 취급하지 않는다.
-- 격리 웹 컨테이너1개와 일회성 peer probe·전용 볼륨2개·내부 네트워크1개·테스트 환경 파일을 제거했다. 외부 실제 수신자에게 시험 메일을 보내지 않았다.
+## Validation
 
-첫 반영 후 독립 검토에서 신규 SMTP 서비스 ID와 기존 recipient alias 선점 경계가 확인됐다. 이전 이미지로 잠금 아래 복구해 가입 제한을 일시 복원하고, 위 예약 정책과 추가 회귀 검증을 적용한 r2를 다시 검증·반영했다. 복구와 최종 교체 모두 계정2개·메일5통과 원래 경로·파일을 보존했다.
+- The final Ubuntu 26.04.1 / Node.js 24.22.2 image passed the production Next.js build and all 49 unit tests.
+- On a dedicated internal network with synthetic account/data volumes, 37 signup checks and 22 post-shutdown/restart checks passed. Production data was not mounted. A separate peer supplying the correct service password and forged loopback headers was rejected before service-account creation. Checks also covered alias/orphan/old-domain ID reservation, internal bootstrap and original-password-authorized legacy delivery-path migration.
+- Without a code environment variable or form field, checks covered signup, 8-character and 128-character Korean passwords, login, invalid password/length/NUL/ID rejection, no hash changes on duplicate signup, prevention of legacy-ID takeover, ownership-proved migration and Secure signed sessions.
+- Success/failure audit events were present and test credentials absent from logs. An initial helper read only stdout and missed WARN events; collecting stdout/stderr together resolved the verification issue without another application change.
+- All three Compose models rendered without a signup-code variable. `tests/platform/signup-check.mjs` runs only after fixture-only gates and domain checks pass.
+- The final archive -> manifest -> config digest matched Trivy evidence. Trivy 0.76.2 used the DB updated at 2026-11-15 04:00 KST: HIGH 0 / CRITICAL 0, with MEDIUM 17 / LOW 4 / UNKNOWN 1 remaining, representing 12 unique CVEs. Of 22 raw rows, 21 had no fixed-version field. Remaining findings were not treated as resolved.
+- The isolated Web container, one-time peer probe, two dedicated volumes, internal network and test environment file were removed. No test mail was sent to real external recipients.
 
-## 실제 운영 반영
+Independent review after the first rollout found boundaries allowing claims of a new SMTP service ID and an existing recipient alias. The previous image was restored under the lock, temporarily restoring signup restrictions. The reservation policy and regression checks above were added, and r2 was revalidated and deployed. Both rollback and final replacement preserved two accounts, five messages and their original paths/files.
 
-2026-11-15 **05:32 KST** 운영 교체와 정상 재시작 검증을 완료했다. Docker Desktop `desktop-linux`의 실제 socket과 `linux/arm64`를 사용했다. 프로젝트 전용 기존 Ubuntu Node24 base를 `NODE_IMAGE=mailbox-node24:ubuntu26.04-20261109-r3`로 받아 새 웹메일 이미지를 빌드했다. 공통 이미지 tag를 덮어쓰지 않았다.
+## Actual Production Rollout
 
-| 항목 | 실제 값 |
+Operating replacement and normal-restart verification completed on 2026-11-15 at **05:32 KST**, using the actual Docker Desktop `desktop-linux` socket and `linux/arm64`. The new Webmail image used the existing project-specific base through `NODE_IMAGE=mailbox-node24:ubuntu26.04-20261109-r3`. No shared image tag was overwritten.
+
+| Item | Recorded Value |
 | --- | --- |
-| Compose 프로젝트 / 서비스 | `platform` / `mailbox-webmail-ui` |
-| 컨테이너 | `mailbox-web` (`c5034bd2bc5d`) |
-| 이미지 tag | `mailbox-webmail-ui:open-signup-20261115-r2` |
-| 이미지 ID | `sha256:fa092416f9a94fe971a146337a1caa837116be7fb95bbcabe7e3b5174d88614f` |
-| 이미지 config digest | `sha256:6e51fc2163486b7fc26049a762e3dd31ad503cb96b55dc2eee6ea7f11877cb74` |
-| 실제 HTTPS | `https://175.195.62.165:20005` |
-| 기존 HTTPS 별칭 | `20006`에서 HTTPS20005로 이동 |
-| 진단 endpoint | `127.0.0.1:20105 -> 3000` |
-| 네트워크 | `platform_edge-mail`, `platform_mailbox-backend` |
+| Compose project / service | `platform` / `mailbox-webmail-ui` |
+| Container | `mailbox-web` (`c5034bd2bc5d`) |
+| Image tag | `mailbox-webmail-ui:open-signup-20261115-r2` |
+| Image ID | `sha256:fa092416f9a94fe971a146337a1caa837116be7fb95bbcabe7e3b5174d88614f` |
+| Image config digest | `sha256:6e51fc2163486b7fc26049a762e3dd31ad503cb96b55dc2eee6ea7f11877cb74` |
+| Actual HTTPS | `https://175.195.62.165:20005` |
+| Existing HTTPS alias | `20006` redirects to HTTPS `20005` |
+| Diagnostic endpoint | `127.0.0.1:20105 -> 3000` |
+| Networks | `platform_edge-mail`, `platform_mailbox-backend` |
 
-현재 공통 edge Nginx가 TLS를 처리하므로 `mailbox-web`만 교체했다. 공통 Nginx·SMTP·IMAP을 포함한 나머지17개 컨테이너의 ID/image/StartedAt/running을 보존했다. `operations/`와 다른 프로젝트 파일은 변경하지 않았다. 저장소 standalone Compose의 HTTP20005/HTTPS20006 설정은 현재 공통 edge의 HTTPS20005/별칭20006 구성과 구분한다.
+The shared edge Nginx terminated TLS, so only `mailbox-web` was replaced. The other 17 containers, including shared Nginx, SMTP and IMAP, retained their IDs/images/StartedAt/running state. Neither `operations/` nor other projects were changed. Distinguish standalone HTTP 20005 / HTTPS 20006 from the shared edge's HTTPS 20005 / alias 20006.
 
-공유 잠금 `/Users/kkkk/Desktop/jskang/03.workspace/01.project/operations/run/deploy.lock`의 같은 inode25825009에서 실제 macOS `flock(2)`를 보유했다. 독립 contender가 잠금을 획득하지 못하는 것을 확인하고 백업·교체·검증·재시작까지 유지했다. 교체 전 TLS 음성 검사에서 HTTP client의 연결 재사용을 배제하도록 helper를 보완했다. 새 연결에서 잘못된 CA와 호스트명이 모두 거부된 후 운영 교체를 진행했다.
+A real macOS `flock(2)` was held on inode `25825009` of `/Users/kkkk/Desktop/jskang/03.workspace/01.project/operations/run/deploy.lock`. An independent contender failed to acquire it; the lock covered backup, replacement, validation and restart. Before replacement, the TLS-negative helper was adjusted to exclude HTTP connection reuse. Wrong CA and hostname were both rejected on fresh connections before proceeding.
 
-기존 계정2개·Maildir5통·queue0건·Webmail 파일21개·import ledger5항목과 소유권/mode150항목을 대조했다. 다섯 볼륨 `mailbox-store`, `smtp-queue-store`, `smtp-auth-store`, `mailbox-account-store`, `webmail-data-store`와 원래 mount·네트워크·포트를 보존했다. 인증 소켓은 root:1500/0660이다. Webmail은 UID5000/capability0과 V8 old/semi-space512/16MiB로 실행하며 OOM·비정상 종료·자동 재시작은 없었다.
+Comparisons preserved two accounts, five Maildir messages, an empty queue, 21 Webmail files, five import-ledger entries and 150 ownership/mode entries. All five volumes (`mailbox-store`, `smtp-queue-store`, `smtp-auth-store`, `mailbox-account-store`, `webmail-data-store`) and original mounts/networks/ports remained. The auth socket was root:1500/mode 0660. Webmail ran as UID 5000 with no capabilities and V8 old/semi spaces of 512/16 MiB, with no OOM, abnormal exit or automatic restart.
 
-실제 HTTPS에서 가입 화면과 코드 없는 입력 검사를 확인했다. 운영에서는 유효하지 않은 비밀번호만 제출해 검사 경로를 확인했으며 테스트 계정을 만들지 않았다. 기존 계정의 로그인·받은메일, TLS 인증서/호스트 검증과 잘못된 CA/호스트 거부, SMTP/IMAP 인증 및 TLS 정책을 검증했다. 실제 `damgox2-worker`의 같은 JVM image/network namespace와 read-only CA/자격 파일로 기존2587의 STARTTLS/CA/호스트/AUTH 후 QUIT를 확인했다. 이 client probe는 MAIL/RCPT/DATA를 보내지 않는다.
+Actual HTTPS checks covered the signup page and validation without a code. Only invalid passwords were submitted in production; no production test account was created. Existing login/inbox, certificate/hostname verification, wrong-CA/hostname rejection and SMTP/IMAP authentication/TLS were checked. A disposable probe using the actual `damgox2-worker` JVM image/network namespace and read-only CA/credentials completed STARTTLS/CA/hostname/AUTH then QUIT on existing port 2587. It issued no MAIL/RCPT/DATA.
 
-## 운영 재현과 복구
+## Reproduction and Recovery
 
-보호 자료는 ignored `.agents/open-signup-20261115/` 아래에 보존한다(directory0700, 비밀 파일0600). `backups/original-web.inspect.json`, `backups/runtime-before.compose.json`, `backups/runtime-open-signup.compose.json`에는 실제 자격·환경값이 포함되므로 Git/PR/로그에 붙이지 않는다. 설정에는 현재 웹메일 서비스만 포함하며 원래 네트워크와 볼륨은 external로 참조한다. Compose 문자열의 `$`는 literal로 보존해 실제 환경값이 변하지 않도록 했다.
+Protected material remains under ignored `.agents/open-signup-20261115/` (directories `0700`, secret files `0600`). `backups/original-web.inspect.json`, `backups/runtime-before.compose.json` and `backups/runtime-open-signup.compose.json` contain actual credentials/environment values: never attach them to Git/PRs/logs. The models select only Webmail and reference original networks/volumes as external. Literal `$` characters are preserved in Compose values.
 
-정상 종료한 웹메일이 유일한 계정/cache writer인 상태에서 `backups/volumes-2026-11-14T20-31-25-475Z/`에 `mailbox-account-store`와 `webmail-data-store`의 일관된 tar 백업을 만들고 hash·tar header를 검증했다. Maildir·queue·인증 소켓은 SMTP/IMAP이 계속 사용하므로 정적인 전체5볼륨 백업이라고 주장하지 않는다. 백업 내역과 SHA256은 `reports/backup-inventory.json`을 확인한다.
+With Webmail gracefully stopped as the sole account/cache writer, consistent account-store and Webmail-data tar backups were created under `backups/volumes-2026-11-14T20-31-25-475Z/`; hashes and tar headers were verified. SMTP/IMAP continued using Maildir, queue and the auth socket, so this was not a static all-five-volume backup. See `reports/backup-inventory.json` for inventory/SHA-256.
 
-공통 운영의 다음 recreate 때도 새 웹메일 이미지와 원래 mount·환경·네트워크·포트를 사용해야 한다. 이 작업은 공통 `operations/edge/runtime.compose.json`을 수정하지 않았으므로 공통 파일의 이전 image로 recreate하면 이전 코드로 돌아갈 수 있다. 새 내부 endpoint는 기존 `mailbox-web:3000`이며 client endpoint는 변경하지 않았다. 현재 운영 재현용 모델은 `backups/runtime-open-signup.compose.json`, 해당 Compose의 환경 파일은 `backups/empty.env`다. 프로젝트명 `platform`에서 `--no-deps --no-build --pull never`와 서비스 `mailbox-webmail-ui`만 선택한다.
+Subsequent shared-deployment recreation must retain the new Webmail image and original mounts/environment/networks/ports. This task did not change `operations/edge/runtime.compose.json`; recreating its older image can revert the code. The internal endpoint remains `mailbox-web:3000`; client endpoints are unchanged. Use protected `backups/runtime-open-signup.compose.json` with `backups/empty.env`, project `platform`, options `--no-deps --no-build --pull never`, selecting only `mailbox-webmail-ui` to reproduce this deployment.
 
-복구 시 같은 공유 잠금을 보유하고 현재 컨테이너 ID/image를 검증한다. 웹메일만 정상 종료하고 volume 제거 없이 컨테이너만 제거한 뒤, `backups/runtime-before.compose.json`과 `backups/empty.env`로 이전 웹메일을 시작한다. 복구 image ref `mailbox-web:before-open-signup-20261115`는 `sha256:9227e6e4f93c836815b49a7102931059cc9dfdfac11d66abeb0adc5701825d5b`를 가리킨다. 복구 후 HTTPS·기존 계정·SMTP TLS/SASL·메일·UID/flag·소유권·client를 다시 대조한다. 계정·메일을 무조건 tar로 덮어쓰지 않는다. 완료된 일회성 `deploy.mjs`를 다시 실행하는 것을 복구 절차로 사용하지 않는다.
+For recovery, hold the same shared lock and verify current container/image IDs. Gracefully stop only Webmail, remove only its container without deleting volumes, then start the old Webmail using `backups/runtime-before.compose.json` and `backups/empty.env`. Rollback ref `mailbox-web:before-open-signup-20261115` points to `sha256:9227e6e4f93c836815b49a7102931059cc9dfdfac11d66abeb0adc5701825d5b`. Recheck HTTPS, existing accounts, SMTP TLS/SASL, messages, UIDs/flags, ownership and the real client. Never blindly restore tar data over current accounts/mail. Do not rerun the completed one-time `deploy.mjs` as a recovery procedure.
 
-`down -v`, 전체 prune, 다른 프로젝트 stop, 공통 Nginx restart, 재귀 chown은 수행하지 않았다. 일회성 배포/잠금 helper와 비밀 백업은 ignored 경로에만 남기며 커밋하지 않는다. 원시 검증 결과는 `reports/deployment-summary.json`, `production-after-preserved.json`, `restart-web.json`, `restart-consumer.json`, `untouched-after.json`, `deploy-lock-proof.json`에서 확인한다.
+No `down -v`, global prune, other-project stop, shared-Nginx restart or recursive chown was performed. One-time deployment/lock helpers and secret backups stay ignored and uncommitted. Raw evidence is in `reports/deployment-summary.json`, `production-after-preserved.json`, `restart-web.json`, `restart-consumer.json`, `untouched-after.json` and `deploy-lock-proof.json`.

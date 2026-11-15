@@ -1,58 +1,60 @@
-# MailBox 메모리·성능 최적화
+# MailBox Memory and Performance Optimization
 
-2026-11-11, Sprint Delivery. 기존 Ubuntu26.04·Node24, 비밀번호8~128자와 hash profile, TLS/CA/hostname 검증·SASL·중계 제한을 유지한다. 실제 운영은 `operations/compose.yaml`의 `platform` 프로젝트이며 컨테이너 이름은 `mailbox-web`, `mailbox-proxy`, `mailbox-smtp`, `mailbox-imap`이다. 이 작업은 MailBox checkout만 수정하며 공통 운영 파일은 수정하지 않는다.
+2026-11-11, Sprint Delivery. This historical record preserves the Ubuntu 26.04 / Node.js 24 runtime, 8–128-character password/hash profile, TLS/CA/hostname verification, SASL and relay restrictions. At the recorded deployment, production used the `platform` project in `operations/compose.yaml`, with containers `mailbox-web`, `mailbox-proxy`, `mailbox-smtp` and `mailbox-imap`. The task changed only the MailBox checkout, not shared operating files. Translation does not rerun these benchmarks or redeploy services.
 
-## 변경
+## Changes
 
-- Maildir·drop 입력은 `MailParser`와 파일 stream으로 처리한다. 첨부파일은 backpressure를 적용해 바로 저장하고 저장이 끝난 뒤 parser를 release한다. 원본 RFC822 Buffer와 전체 첨부 Buffer를 동시에 만들지 않는다. 기존 CID→data URI 변환은 라이브러리의 같은 변환/한도를 사용하며 필요한 inline image만 다시 읽는다. MIME 파일명은 저장 경로로 사용하지 않는다.
-- 변환 중에는 같은 volume의 새 staging 디렉터리를 사용한다. 실패하면 자신이 만든 미완성 디렉터리와 stream만 정리한다. 기존 cache·계정·메일·import ledger 원본을 삭제하거나 포맷을 바꾸지 않는다. 동시 drop 조회도 한 batch를 공유해 중복 가져오기를 막는다.
-- 목록의 metadata 읽기는 요청당 최대32개, Maildir source 열거는 최대4개로 제한한다. 날짜 정렬과 기존 접근 필터는 유지한다. 메타데이터와 본문을 영구 메모리 cache에 보관하지 않는다. 기존 메일 목록만 볼 때는 MIME library를 늦게 로드한다.
-- Webmail V8 old-generation은512MiB, semi-space는16MiB를 기본값으로 쓴다. 이는 **프로세스 RSS나 컨테이너 전체 메모리 상한이 아니다**. TLS, stream buffer, Argon2의 native64MiB/작업 등은 별도다. 인증 비용을 낮추거나 Docker hard limit으로 프로세스를 강제 종료하는 방식은 쓰지 않았다.
-- Nginx 기본 worker는2개이며 worker당 upstream keepalive8개를 둔다. `auto` 또는1~128로 변경할 수 있다. 요청/응답 buffering 비활성화, streaming upload, timeout, TLS와 감사 로그는 유지한다.
+- Maildir/drop input uses `MailParser` and file streams. Attachments are written directly with backpressure, and the parser is released after writing completes. The full RFC822 buffer and complete attachment buffer are not allocated together. Existing CID-to-data-URI conversion retains the library's conversion/limits, rereading only required inline images. MIME filenames are never used as storage paths.
+- Conversion uses a new staging directory on the same volume. On failure, clean up only task-owned incomplete directories/streams. Preserve existing cache, accounts, mail and original import-ledger format. Concurrent drop requests share one batch to prevent duplicate import.
+- Metadata reads are bounded to 32 per request; Maildir source enumeration to four. Date sorting and access filters remain. Metadata/body content is not held in a permanent memory cache. MIME libraries load lazily when viewing only existing message lists.
+- Webmail defaults to a 512 MiB V8 old generation and 16 MiB semi-space. These are **not a process-RSS or container-memory limit**. TLS, stream buffers and Argon2's native 64 MiB per operation are additional. Authentication cost was not reduced, and no Docker hard limit was added to force process termination.
+- Nginx defaults to two workers and eight upstream keepalive connections per worker. Workers accept `auto` or 1–128. Request/response buffering remains disabled; streaming uploads, timeouts, TLS and audit logs remain.
 
-근거: [MailParser stream/release API](https://nodemailer.com/extras/mailparser), [Node24 V8 옵션](https://nodejs.org/docs/latest-v24.x/api/cli.html#--max-old-space-sizesize-in-mib), [Nginx worker 설정](https://nginx.org/en/docs/ngx_core_module.html#worker_processes).
+References: [MailParser stream/release API](https://nodemailer.com/extras/mailparser), [Node.js 24 V8 options](https://nodejs.org/docs/latest-v24.x/api/cli.html#--max-old-space-sizesize-in-mib), [Nginx workers](https://nginx.org/en/docs/ngx_core_module.html#worker_processes).
 
-## 측정
+## Measurements
 
-Docker Desktop Linux ARM64/Engine29.9.2, Node24.22.2에서 분리된 합성 데이터로 비교했다. 개인 메일을 부하 시험에 사용하지 않았다. 수치는 로컬 보호 증거 `.agents/performance-20261111/reports/performance-summary.json` 및 raw trial에서 계산한 중앙값이다.
+Separate synthetic data was compared on Docker Desktop Linux ARM64 / Engine 29.9.2 / Node.js 24.22.2. No personal mail was used for load testing. Values are medians from protected local `.agents/performance-20261111/reports/performance-summary.json` and raw trials.
 
-| 항목 | 이전 | 최종 | 변화 |
+| Metric | Before | Final | Change |
 | --- | ---: | ---: | ---: |
-| Webmail working set, 부하 후 |1140.6MiB|224.8MiB|약80.3% 감소|
-| Nginx working set, 부하 후 |11.9MiB|6.4MiB|약46.3% 감소|
-| 받은메일 p95 |347.8ms|241.8ms|약30.5% 감소|
-| 받은메일 처리량 |39.28req/s|37.60req/s|약95.7% 유지|
-|32MiB 첨부 처리 최대 RSS|388.2MiB|128.9MiB|약66.8% 감소|
-|32MiB 첨부 처리 시간|600.1ms|467.7ms|약22.1% 감소|
+| Webmail post-load working set | 1140.6 MiB | 224.8 MiB | About 80.3% lower |
+| Nginx post-load working set | 11.9 MiB | 6.4 MiB | About 46.3% lower |
+| Inbox p95 latency | 347.8 ms | 241.8 ms | About 30.5% lower |
+| Inbox throughput | 39.28 req/s | 37.60 req/s | About 95.7% retained |
+| Peak RSS, 32 MiB attachment | 388.2 MiB | 128.9 MiB | About 66.8% lower |
+| Processing time, 32 MiB attachment | 600.1 ms | 467.7 ms | About 22.1% lower |
 
-HTTP는 cached mail201개, 동시8요청, 같은 fixture/CA/계정, phase마다48회 warm-up 후 trial당96회다. 이전 이미지는 순서를 바꾼6개 trial, 최종 r3 이미지는3개 trial을 사용했다. 두 phase의 baseline 처리량 범위는30.44~42.75req/s, 최종은36.95~38.37req/s다. 다른 상시 운영 작업과 GC의 변동이 있으므로 처리량 향상이나 통계적 동등성을 주장하지 않는다. 허용 기준은 처리량90% 이상, p95 지연15% 이내였으며 통과했다. MIME는 같은32MiB 바이너리·같은 Node/dependencies/입출력으로 fresh process에서 각3회 비교하고 저장한 첨부의 byte count/SHA256이 모두 같은지 확인했다.
+HTTP used 201 cached messages, concurrency eight, the same fixture/CA/accounts, 48 warm-up requests per phase and 96 requests per trial. The baseline had six trials with reordered execution; final r3 had three. Baseline throughput across both phases ranged 30.44–42.75 req/s; final throughput ranged 36.95–38.37 req/s. Other ongoing tasks and GC caused variability, so no throughput improvement or statistical equivalence was claimed. Acceptance required at least 90% throughput and no more than 15% p95 regression; both passed. MIME compared three fresh-process trials per version using the same 32 MiB binary, Node/dependencies and I/O, verifying identical saved byte counts/SHA-256.
 
-working set은 cgroup usage에서 inactive file cache를 뺀 값이다. PID1 RSS/HWM과 swap도 별도로 기록했다. cold 운영 프로세스의 RSS와 warmed fixture를 직접 비교하지 않는다. 위 수치는 **해당 workload의 비교**이며 모든 mailbox 크기·동시성의 전역 최소값이 아니다. 큰 mailbox나 여러 대용량 본문을 동시에 조회하는 운영은 같은 probe로 다시 측정해 `WEBMAIL_NODE_OPTIONS`와 worker 수를 조절한다.
+Working set is cgroup usage minus inactive file cache. PID 1 RSS/HWM and swap were recorded separately. A cold production RSS was not directly compared with a warmed fixture. These are **results for that workload**, not a global memory minimum for every mailbox size/concurrency. Remeasure large mailboxes or concurrent large-body requests with the same probes before tuning `WEBMAIL_NODE_OPTIONS` and workers.
 
-## 검증
+## Validation
 
-- 실제 최종 runtime image에서 단위47개 통과, production Next build 통과. 테스트 scratch는 `MAILBOX_TEST_TMP`와 `TMPDIR`로 허용된 작업 경로에 둔다.
-- 별도5개 fixture volume과 internal network를 사용했다. cached mail201개에서 시작해32MiB 첨부 추가,49MiB plain mail, 동시 drop import, held mail의 로컬 배달 후205개를 확인했다. Maildir은1→4통이다.
-- 원래 계정·메일·UID/읽음·기존 Webmail 데이터605개 파일·ledger·소유권과 root:1500/0660 socket을 대조했다. 보류 큐1건은 새 이미지의 정상 종료/재시작, 이전 이미지 rollback 및 새 이미지 복귀 동안 byte 단위로 보존했다. 마지막에만 로컬 수신자에게 release했다.
--49MiB 본문 파싱뿐 아니라 실제 상세 화면 응답118,583,803byte를 streaming으로 읽어 완료했다. 두32MiB 첨부 다운로드도 원본과 byte count/hash가 일치했다. 미인증·다른 계정의 첨부 접근을 거부했다.
-- TLS 없는 제출/IMAP 로그인, 비인증·오인증·일반 계정의 외부 relay, 잘못된 CA/hostname 거부와 Secure/HttpOnly/SameSite cookie를 확인했다. 시험 DATA는 `fixture.test` 내부 수신자만 사용했다.
+- All 47 unit tests and the production Next.js build passed in the final runtime image. Test scratch stayed inside the authorized workspace through `MAILBOX_TEST_TMP` and `TMPDIR`.
+- Five separate fixture volumes and an internal network were used. Starting with 201 cached messages, tests added a 32 MiB attachment, a 49 MiB plain message, concurrent drop import and local held-mail delivery, reaching 205 cached messages. Maildir grew from one to four messages.
+- Comparisons covered original accounts/mail/UIDs/read flags, 605 existing Webmail files, ledger, ownership and root:1500/mode 0660 socket. A held queue message remained byte-identical across new-image shutdown/restart, old-image rollback and return to the new image. It was released only to a local recipient at the end.
+- The 49 MiB body was parsed and its actual 118,583,803-byte detail response was streamed to completion. Two 32 MiB attachment downloads matched source byte counts/hashes. Unauthenticated and other-account attachment access was rejected.
+- Checks covered submission/IMAP without TLS, external relay rejection for anonymous/wrong-password/ordinary accounts, wrong CA/hostname rejection and Secure/HttpOnly/SameSite cookies. Test DATA went only to `fixture.test` recipients.
 
-재사용 probe는 `tests/performance/`에 있다. `http-benchmark.mjs`는 fixture 계정과 제한된 로컬 endpoint만 받는다. `mime-benchmark.mjs`는 `MAILBOX_PERF_ROOT` 아래 input/output만 사용한다. `data-snapshot.mjs`는 대용량 파일도 stream으로 hash하고 원문·주소·계정 hash를 출력하지 않는다. `compare-snapshots.mjs`의 기본은 큐까지 strict 비교다. 운영의 `live-queue` 모드는 SMTP를 계속 실행하므로 실제 배달로 변할 수 있는 queue byte의 정적 일치를 강제하지 않는다. 대신 fixture held queue 검증, 실제 SMTP/IMAP의 동일 ID/image/StartedAt와 volume 연결을 함께 확인한다.
+Reusable probes live in `tests/performance/`. `http-benchmark.mjs` accepts fixture accounts and restricted local endpoints only. `mime-benchmark.mjs` confines I/O to `MAILBOX_PERF_ROOT`. `data-snapshot.mjs` stream-hashes large files without outputting bodies, addresses or account hashes. `compare-snapshots.mjs` defaults to strict comparison including queues. Production `live-queue` mode leaves SMTP running, so it does not require static equality of queue bytes that legitimate delivery may change. It combines fixture held-queue checks with unchanged real SMTP/IMAP IDs/images/StartedAt and volume attachments.
 
-## 최종 이미지 검사
+## Final Image Scans
 
-| 역할 | 프로젝트 전용 tag | 실제 image ID |
+| Role | Project-Specific Tag | Actual Image ID |
 | --- | --- | --- |
-| Webmail |`mailbox-webmail-ui:memory-20261111-r3`|`sha256:9227e6e4f93c836815b49a7102931059cc9dfdfac11d66abeb0adc5701825d5b`|
-| Proxy |`mailbox-webmail-proxy:memory-20261111-r1`|`sha256:87dd5d06d05ebb08fa12b3370b8b921fbf7453003627a9836b84a06bcd92bd78`|
+| Webmail | `mailbox-webmail-ui:memory-20261111-r3` | `sha256:9227e6e4f93c836815b49a7102931059cc9dfdfac11d66abeb0adc5701825d5b` |
+| Proxy | `mailbox-webmail-proxy:memory-20261111-r1` | `sha256:87dd5d06d05ebb08fa12b3370b8b921fbf7453003627a9836b84a06bcd92bd78` |
 
-두 최종 이미지는 Ubuntu26.04.1이다. Webmail은 Node24.22.2, proxy는 Ubuntu 보안 revision `nginx1.28.3-2ubuntu1.12`다. Trivy0.76.2 DB UpdatedAt `2026-11-10T19:01:23.081219346Z`, DownloadedAt `2026-11-11T11:06:42.636548Z`로 검사했다. ignore/severity filter/ignore-unfixed를 사용하지 않았고 Java DB도 포함했다. OCI index→ARM64 manifest→config digest와 scanner ImageID, 현재 daemon image ID를 연결해 확인했다.
+Both final images used Ubuntu 26.04.1. Webmail used Node.js 24.22.2; proxy used Ubuntu security revision `nginx 1.28.3-2ubuntu1.12`. Trivy 0.76.2 used DB UpdatedAt `2026-11-10T19:01:23.081219346Z`, DownloadedAt `2026-11-11T11:06:42.636548Z`. No ignore list, severity filter or ignore-unfixed was used; Java DB was included. OCI index -> ARM64 manifest -> config digest was bound to scanner ImageID and the current daemon image ID.
 
-**HIGH0/CRITICAL0이며 전체0은 아니다.** Webmail MEDIUM42/LOW4(고유 CVE36), proxy MEDIUM34/LOW4(고유 CVE29), 합계84행이 남는다. 모두 scanner의 수정 버전 필드가 없다. 이미지/패키지 간 중복 행을 전체 고유 CVE 수로 오인하지 않는다. 이 결과를 전체 위험 수용이나 예정된 Node 보안 릴리스 해결로 간주하지 않는다. 변경하지 않은 SMTP/IMAP을 이번에 교체하거나 재검사했다고 주장하지 않는다.
+**HIGH 0 / CRITICAL 0 does not mean zero total findings.** Webmail retained MEDIUM 42 / LOW 4 (36 unique CVEs); proxy retained MEDIUM 34 / LOW 4 (29 unique CVEs), for 84 raw rows total. None had a scanner fixed-version field. Do not confuse duplicate image/package rows with a global distinct-CVE count. This was neither blanket risk acceptance nor resolution of the scheduled Node security release. Unchanged SMTP/IMAP were not replaced or rescanned by this task.
 
-## 빌드와 공통 운영 연결
+## Builds and Shared Deployment
 
-공통 tag를 덮어쓰지 않고 고유한 프로젝트 tag로 빌드한다. `NODE_IMAGE`는 검증된 Ubuntu26.04/Node24 공통 기반을 받으며, 없으면 기존 프로젝트 Node24 fallback을 먼저 빌드할 수 있다.
+Build unique project tags without overwriting shared tags. `NODE_IMAGE` accepts a verified Ubuntu 26.04 / Node.js 24 base; if unavailable, build the project fallback first.
+
+The recorded builds predated the later `license_files` build context. For the historical source, the build commands were:
 
 ```sh
 docker build --build-arg NODE_IMAGE=platform/node24:ubuntu26.04-20261109-r2 \
@@ -61,9 +63,9 @@ docker build -t mailbox-webmail-proxy:memory-20261111-r1 \
   -f webmail-ui/Dockerfile.proxy webmail-ui
 ```
 
-다른 시점에 재빌드한 이미지는 같은 tag라도 검사와 검증을 다시 한다. 최종 선택은 tag 문자열보다 image ID로 확인한다.
+For current source, use Bake or provide the license context described in the [container guide](container-packages.md). Rescan and revalidate any rebuild, even with the same tag. Confirm the selected image ID, not just its tag string.
 
-`compose.performance.yaml`은 기존 standalone 또는 공통 Compose **뒤에 추가하는 override**다. 공통 파일을 수정하지 않고 두 서비스의 이미지·힙·worker·grace period만 조합한다.
+`compose.performance.yaml` is an override added **after** the standalone or shared Compose model. It changes only the two services' images, heap, workers and grace periods, without editing the shared file.
 
 ```sh
 MAILBOX_PERF_WEB_IMAGE=mailbox-webmail-ui:memory-20261111-r3 \
@@ -72,33 +74,33 @@ docker compose -p platform -f ../operations/compose.yaml \
   -f compose.performance.yaml config --quiet
 ```
 
-실제 교체는 아래 공유 잠금 안에서 검증된 이미지로 두 service만 `up --no-deps --no-build --pull never` 한다. SMTP/IMAP이나 다른 platform service를 선택하지 않는다. 이후 공통 세션도 이 override/tag를 함께 사용해야 현재 최적화 이미지를 유지한다. 공통 파일만으로 이전 image tag를 recreate하면 이전 이미지로 돌아갈 수 있다. 현 세션은 공통 tag나 공통 설정을 덮어쓰지 않는다.
+Under the shared lock, use verified images with `up --no-deps --no-build --pull never`, selecting only the two services. Do not select SMTP/IMAP or other platform services. Later shared deployment must retain the override/tags to preserve these optimized images; recreating only the shared model's old tag can revert them. This task did not overwrite shared tags/configuration.
 
-환경 조정:
+Configuration:
 
-- `WEBMAIL_NODE_OPTIONS`: 기본 `--max-old-space-size=512 --max-semi-space-size=16`. 필요하면 검증 후 늘릴 수 있다. Argon2 비용은 조정하지 않는다.
-- `NGINX_WORKER_PROCESSES`: 기본2, `auto` 또는1~128. 높은 TLS 동시성이 필요한 경우 다시 부하 검증한다.
+- `WEBMAIL_NODE_OPTIONS`: default `--max-old-space-size=512 --max-semi-space-size=16`; increase only after validation. Do not change Argon2 cost.
+- `NGINX_WORKER_PROCESSES`: default two, `auto` or 1–128; repeat load testing for higher TLS concurrency.
 
-## 잠금·데이터·복구
+## Locking, Data and Recovery
 
-실제 macOS `flock(2)`를 `/Users/kkkk/Desktop/jskang/03.workspace/01.project/operations/run/deploy.lock`의 같은 inode에 보유한다. 별도 nonblocking contender가 실패하는 것으로 확인하고 교체·검증·재시작·필요시 rollback이 끝날 때까지 유지한다. lock 파일은 삭제하지 않는다.
+Hold a real macOS `flock(2)` on the same inode of `/Users/kkkk/Desktop/jskang/03.workspace/01.project/operations/run/deploy.lock`. Verify a separate nonblocking contender fails; retain the lock through replacement, validation, restart and any rollback. Do not delete the lock file.
 
-운영 준비 자료는 ignored `.agents/performance-20261111/backups/`(directory0700/file0600)다. 현재 실제4개 MailBox의 inspect와, 경로가 절대값으로 해석되고 실제 네트워크/volume을 external로 참조하는 `runtime.compose.json`을 보존한다. 이 JSON에는 비밀 환경값이 있으므로 Git/PR에 첨부하지 않는다. 실제 운영의 container 이름·network·port와5개 volume을 유지하며 checkout의 standalone 설정으로 현재 공통 구성을 덮어쓰지 않는다.
+Protected ignored `.agents/performance-20261111/backups/` uses directories `0700` and files `0600`. Preserve all four actual MailBox inspect records and `runtime.compose.json`, with absolute paths and existing networks/volumes referenced as external. That JSON contains secret environment values: never attach it to Git/PRs. Keep actual container names/networks/ports and all five volumes; do not overwrite shared production with the checkout's standalone model.
 
-교체는 proxy를 SIGQUIT로 drain한 뒤 Webmail을 정상 종료한다. Webmail이 유일한 account/cache writer인 상태에서 account/cache2개 volume을 일관된 tar로 백업하고 hash와 전체 tar header를 확인한다. Maildir·queue·auth socket은 SMTP/IMAP이 계속 사용하므로 정적인 전체 백업이라고 주장하지 않는다. 다섯 volume 모두 삭제/복원/재귀 chown하지 않는다. 새 web은 기존 Maildir을 read-only로만 mount한다.
+Drain proxy with SIGQUIT, then gracefully stop Webmail. With Webmail as the sole account/cache writer, consistently tar-back up those two volumes and verify hashes and all tar headers. SMTP/IMAP continue using Maildir/queue/auth sockets; this is not a static all-volume backup. Do not delete, restore wholesale or recursively chown any of the five volumes. New Webmail mounts original Maildir read-only.
 
-복구 image ref는 `mailbox-web:before-memory-20261111`, `mailbox-proxy:before-memory-20261111`이다. 같은 잠금 아래 현재 두 컨테이너의 ID/image를 확인하고 정상 종료 후 **두 컨테이너만** 제거한다(volume 제거 금지). 보호된 `runtime.compose.json`만 사용해 이전 web을 `--no-deps --no-build --pull never`로 시작하고 TLS/SASL readiness 후 이전 proxy를 시작한다. 새 `.performance` override는 복구 실행에서 제외한다. 기존 mail/account/cache를 무조건 tar로 덮어쓰지 않는다. old model의 secret/mount/network/port를 유지하고 계정·메일·UID/flag·원래 cache/ledger·소유권과 실제 client를 대조한다.
+Rollback refs are `mailbox-web:before-memory-20261111` and `mailbox-proxy:before-memory-20261111`. Under the same lock, verify both current IDs/images, gracefully stop and remove **only those two containers**, preserving volumes. Use only protected `runtime.compose.json` to start the previous Webmail with `--no-deps --no-build --pull never`, wait for TLS/SASL readiness, then start the old proxy. Exclude the performance override during recovery. Do not blindly restore tar over current mail/accounts/cache. Preserve the old model's secrets/mounts/networks/ports and compare accounts, mail, UIDs/flags, original cache/ledger, ownership and the real client.
 
-일회성 배포/잠금 helper는 같은 ignored task 경로에만 보존하며 커밋하지 않는다. 완료된 `deploy.mjs`를 반복 실행하는 것을 복구 절차로 사용하지 않는다. `down -v`, 전체 prune, 다른 프로젝트 stop, 임의 worktree는 사용하지 않는다.
+One-time deployment/lock helpers remain ignored in the task directory. Do not rerun completed `deploy.mjs` for recovery. No `down -v`, global prune, other-project stop or arbitrary worktree is permitted.
 
-## 실제 운영 결과
+## Recorded Production Results
 
-2026-11-11 **20:55 KST** 실제 교체와 정상 재시작 검증을 완료했다. 운영 web은 `d07eb68b06db`, proxy는 `5b06a2838125`이며 위 최종 image ID로 실행한다. 두 서비스 모두 restart0, 정상 종료 시험 exit0, OOM 없음이다. Webmail PID1 UID5000/capability0, Nginx master+worker2개를 확인했다.
+Replacement and normal restart completed on 2026-11-11 at **20:55 KST**. Webmail container `d07eb68b06db` and proxy `5b06a2838125` ran the final image IDs above. Both had restart count zero, normal-stop exit zero and no OOM. Webmail PID 1 was UID 5000/capability zero; Nginx had a master and two workers.
 
-원래 계정2개·Maildir5통·queue0건·기존 Webmail 파일21개·ledger5항목·소유권/mode150항목과 인증서/CA/서비스 인증값을 보존했다. socket은 root:1500/0660이다. 다섯 volume 이름과 원래 mount·network·port를 유지했다. SMTP/IMAP2개와 다른 프로젝트12개는 ID/image/StartedAt/running이 동일하다. 실제 `damgox2-worker`의 같은 JVM image/network namespace와 read-only CA/자격 파일로 기존2587 TLS/hostname/AUTH 후 QUIT를 검증했다. 이 probe는 MAIL/RCPT/DATA를 보내지 않는다.
+Two accounts, five Maildir messages, an empty queue, 21 existing Webmail files, five ledger entries, 150 ownership/mode entries and certificate/CA/service credentials were preserved. The socket was root:1500/mode 0660. All five volume names and original mounts/networks/ports remained. SMTP/IMAP and 12 other-project containers retained ID/image/StartedAt/running state. A probe using the real `damgox2-worker` JVM image/network namespace and read-only CA/credentials verified TLS/hostname/AUTH then QUIT on existing 2587, without MAIL/RCPT/DATA.
 
-공유 잠금 inode25825009를 교체·검증·재시작까지 보유했다. 처음 시도의 마지막 `docker top` 형식 호환성 오류 때에는 자동으로 이전 이미지와 구성을 복구했고, 확인 방식을 `/proc`으로 보완한 재시도가 모두 통과했다. raw 감사 이력은 `deploy-audit.jsonl`에 보존한다.
+Lock inode `25825009` was held through replacement, validation and restart. An initial final-check failure due to `docker top` format compatibility automatically restored the previous images/configuration. A retry using `/proc` verification passed. Raw audit history remains in `deploy-audit.jsonl`.
 
-일관된 account/cache 백업은 `backups/volumes-2026-11-11T11-54-21-369Z/`이다. 실제 디렉터리명과 SHA256은 `reports/backup-inventory.json`을 우선 확인한다. 복구 시 `backups/runtime.compose.json`과 두 `before-memory-20261111` image ref를 사용하며, `backups/performance.env`와 이 checkout의 `compose.performance.yaml`은 최적화 운영 재현용이다. 보호 JSON/환경 파일을 Git에 넣지 않는다.
+Consistent account/cache backups are in `backups/volumes-2026-11-11T11-54-21-369Z/`; prefer actual paths and SHA-256 from `reports/backup-inventory.json`. Recovery uses `backups/runtime.compose.json` and the two `before-memory-20261111` refs. `backups/performance.env` and checkout `compose.performance.yaml` reproduce optimized operation. Never commit protected JSON/environment files.
 
-보호된 `deployment-summary.json`, `production-final-preserved.json`, `production-restart-web.json`, `production-restart-consumer.json`, `deploy-others-after.json`, `deploy-lock-proof.json`에 검증 결과를 남겼다. GitHub는 요청한 feature commit/push, 현재-head 독립 App 승인과 필수 검사 뒤 develop merge 및 branch 정리 순서다. 이미지 변경 없는 Git 작업은 Docker를 다시 교체하지 않는다.
+Protected `deployment-summary.json`, `production-final-preserved.json`, `production-restart-web.json`, `production-restart-consumer.json`, `deploy-others-after.json` and `deploy-lock-proof.json` retain results. The authorized GitHub workflow was feature commit/push, independent current-head App approval and required checks, develop merge and branch cleanup. Git-only work without image changes did not replace Docker again.

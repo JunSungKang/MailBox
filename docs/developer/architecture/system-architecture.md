@@ -1,24 +1,24 @@
 # MailBox System Architecture
 
-문서 최신화 기준일: 2026-11-15
+Last updated: 2026-11-15
 
-## 모듈 경계
+## Module Boundaries
 
-- `smtp-receiver`: 인터넷 SMTP 요청을 받아 Postfix가 Maildir에 배달한다.
-- `imap-mailbox`: 같은 Maildir volume을 Dovecot IMAP으로 제공한다.
-- `webmail-ui`: Maildir을 읽어 자체 메일 저장소로 가져오고 SMTP 수신기에 발송을 요청한다.
-- 운영 `mailbox-webmail-proxy`: `webmail-ui/nginx.conf.template`을 사용하는 Nginx 컨테이너로 Webmail HTTPS 연결을 처리한다.
+- `smtp-receiver`: accepts Internet SMTP traffic and delivers messages into Maildir with Postfix.
+- `imap-mailbox`: exposes the same Maildir volume through Dovecot IMAP.
+- `webmail-ui`: reads Maildir into its own mail store and submits outgoing messages to SMTP.
+- Production `mailbox-webmail-proxy`: terminates Webmail HTTPS with Nginx using `webmail-ui/nginx.conf.template`.
 
-각 모듈은 자신의 Dockerfile과 설정을 소유한다. 루트 Docker Compose만 모듈 사이의 네트워크, volume, 포트와 환경변수를 조립한다.
+Each module owns its Dockerfiles and configuration. Only root Compose assembles inter-module networks, volumes, ports and environment variables.
 
-| 모듈 | 공개 port | 입력 | 출력 |
+| Module | Port | Input | Output |
 | --- | --- | --- | --- |
-| `smtp-receiver` | `25` | SMTP, 수신 주소 map | Maildir, Postfix queue/log |
-| `imap-mailbox` | `143` | Maildir | IMAP mailbox |
-| `webmail-ui` | 내부 `3000`, 운영 진단 loopback `20105` | HTTP, Maildir read, SMTP transport | HTML, Webmail data, SMTP submission |
-| 운영 HTTPS 프록시 | `20006 -> 443`, `20005 -> 80` (이전 URL 임시 유지) | HTTPS, HTTP 이동 | 내부 Webmail HTTP |
+| `smtp-receiver` | Public `25` | SMTP, recipient maps | Maildir, Postfix queue/logs |
+| `imap-mailbox` | Public `143` | Maildir | IMAP mailbox |
+| `webmail-ui` | Internal `3000`; production diagnostic loopback `20105` | HTTP, read-only Maildir, SMTP transport | HTML, Webmail data, SMTP submission |
+| Production HTTPS proxy | `20006 -> 443`, `20005 -> 80`; old URLs retained temporarily | HTTPS, HTTP redirect | Internal Webmail HTTP |
 
-## 런타임 흐름
+## Runtime Flow
 
 ```text
 Internet SMTP
@@ -32,15 +32,15 @@ webmail-ui compose
   -> sent mailbox metadata
 ```
 
-`mailbox-store`는 SMTP, IMAP, Webmail이 공유한다. `smtp-queue-store`는 Postfix 큐, `webmail-data-store`는 Webmail 변환 메일을 보존한다. `mailbox-account-store`는 Dovecot 인증 사용자와 Postfix 수신 주소 map을 보존한다.
+SMTP, IMAP and Webmail share `mailbox-store`. `smtp-queue-store` preserves the Postfix queue; `webmail-data-store` preserves imported Webmail messages; `mailbox-account-store` preserves Dovecot users and Postfix recipient maps. `smtp-auth-store` shares the Dovecot/Postfix authentication socket.
 
-Webmail은 `mailbox-store`를 read-only로 읽어 원본 Maildir을 자체 저장 형식으로 가져온다. 변환된 메시지는 `mail/{inbox,sent,bounced}/<message-id>` 아래의 `meta.json`, `body.txt`, `body.html`, `attachments/`로 저장한다.
+Webmail reads original Maildir messages through a read-only mount and imports them into its own file format. Each `mail/{inbox,sent,bounced}/<message-id>` directory contains `meta.json`, `body.txt`, `body.html` and `attachments/`.
 
 ## Webmail Request Flow
 
 ```text
 browser
-  -> production HTTPS proxy (개발은 loopback HTTP)
+  -> production HTTPS proxy (loopback HTTP in development)
   -> server.mjs auth/send/download handlers
   -> Next.js App Router pages
      -> auth-core signed session
@@ -48,7 +48,9 @@ browser
      -> mailStore filesystem/import rule
 ```
 
-로그인 사용자는 HMAC 서명 cookie로 식별한다. 로그인 비밀번호는 `mailbox-account-store`의 Dovecot passwd-file에 있는 hash로 확인한다. 신규 계정은 8~128자 전체를 검증하는 Argon2id를 사용하고 기존 salted bcrypt(BLF-CRYPT) 계정도 변경 없이 검증한다. 회원가입은 아이디와 비밀번호로 공개 제공하며 Dovecot 사용자, 허용된 각 domain의 Postfix 수신 주소, 사용자별 Maildir 배달 경로를 함께 등록한다. 기존 recipient local-part는 domain과 관계없이 예약하며, 원래 비밀번호로 소유권을 증명한 이전 계정만 해당 ID를 이전할 수 있다. SMTP 서비스 ID는 실제 loopback peer와 설정된 서비스 비밀번호를 모두 증명한 내부 bootstrap에만 생성 권한을 준다. 받은메일과 반송메일은 수신자 local-part, 보낸메일은 발신자 local-part가 현재 사용자와 일치해야 조회·상세·첨부 접근이 허용된다.
+HMAC-signed cookies identify logged-in users. Passwords are verified against hashes in the Dovecot passwd-file in `mailbox-account-store`. New accounts use Argon2id, verifying the full 8–128-character password; existing salted bcrypt (BLF-CRYPT) accounts remain supported without rewriting their hashes.
+
+Public signup creates the Dovecot user, Postfix recipients for each allowed domain, and the user's Maildir delivery path. Existing recipient local parts are reserved across domains; a legacy account may migrate an ID only after proving ownership with its original password. Internal bootstrap may create the SMTP service ID only when it proves both a real loopback peer and the configured service password. Inbox/bounced access requires the recipient local part to match the current user; sent-mail access requires the sender local part to match. The same rules apply to details and attachments.
 
 ```text
 webmail signup
@@ -58,24 +60,24 @@ webmail signup
   -> mailbox-store/<user>/Maildir
 ```
 
-메일 발송은 로그인 사용자 ID와 `MAIL_DEFAULT_DOMAIN`으로 발신 주소를 고정하고 내부 `SMTP_HOST:587` (호환 `2587`은 동일 정책)에 검증된 STARTTLS와 전용 SASL 계정으로 제출한다. 클라이언트가 보낸 임의 발신자 문자열은 실제 발신자 권한으로 사용하지 않는다.
+Outgoing mail fixes the sender to the logged-in user ID and `MAIL_DEFAULT_DOMAIN`. Webmail submits over internal `SMTP_HOST:587` with verified STARTTLS and a dedicated SASL account; compatibility `2587` has the same policy. A client-supplied sender string does not grant sending authority.
 
 ## Configuration Boundary
 
-- 공통 host/domain/port/image/volume 값은 `.env`에서 Compose로 전달한다.
-- SMTP·IMAP·프록시는 `MAIL_TLS_DIR`의 서버 인증서와 개인키를 read-only로 읽는다. CA 개인키는 공유하지 않는다. SMTP는 STARTTLS를 제공하고, IMAP 로그인에는 TLS 1.2 이상의 연결이 필요하다.
-- 운영 Webmail은 HTTPS 프록시를 통해 공개하며 HTTP는 `MAIL_WEB_HOSTNAME`과 `MAIL_WEB_HTTPS_PORT`의 주소로 이동한다. 개발 HTTP는 loopback에만 노출한다.
-- `MAIL_NETWORK_SUBNET`은 Compose 네트워크 대역만 정하며 중계 권한을 부여하지 않는다. 공개 `25 → 25` (호환 리스너 `2525` 유지)는 로컬 domain 수신만 허용하고, 내부 `587` 및 호환 `2587`은 TLS와 허용된 전용 SASL 사용자만 허용한다.
-- Dovecot은 `smtp-auth-store`의 Unix socket으로 SMTP AUTH를 제공한다. SMTP 서비스는 socket volume을 read-only로 mount한다. 일반 IMAP 사용자 인증만으로 제출 권한을 얻지 못한다.
-- `MAIL_SMTP_CA_FILE`은 앱이 서버를 검증할 공개 CA bundle이며 서버 개인키를 앱에 공유하지 않는다. 외부 MTA 배달도 TLS와 인증서 검증 실패 시 큐에 보류한다.
-- `WEBMAIL_SESSION_SECRET`은 운영에서 placeholder를 허용하지 않는다. `WEBMAIL_SIGNUP_TOKEN`은 사용하지 않으며 가입에 필요하지 않다.
-- 운영 Compose의 `WEBMAIL_COOKIE_SECURE`는 `true`로 고정한다. 개발 HTTP 실행은 `false`를 사용한다.
-- SMTP 수신 가능 ID는 회원가입으로 `mailbox-account-store/virtual-mailbox-accounts`에 등록한다.
+- `.env` supplies shared host, domain, port, image and volume values to Compose.
+- SMTP, IMAP and the proxy read server certificates/keys from `MAIL_TLS_DIR` through read-only mounts. Do not share the CA private key. SMTP offers STARTTLS; IMAP login requires TLS 1.2 or later.
+- Production Webmail is public through HTTPS. The HTTP listener redirects to `MAIL_WEB_HOSTNAME` and `MAIL_WEB_HTTPS_PORT`. Development HTTP is loopback-only.
+- `MAIL_NETWORK_SUBNET` configures only the Compose network, never relay authority. Public `25 -> 25` (with compatibility listener `2525`) receives only local-domain mail. Internal `587` and compatibility `2587` require TLS and the allowed dedicated SASL user.
+- Dovecot provides SMTP AUTH through the Unix socket in `smtp-auth-store`, mounted read-only by SMTP. Ordinary IMAP authentication does not grant submission authority.
+- `MAIL_SMTP_CA_FILE` is a public CA bundle for server verification. Do not share the server private key with Webmail. Outbound MTA delivery also defers mail when TLS or certificate verification fails.
+- Production rejects a placeholder `WEBMAIL_SESSION_SECRET`. `WEBMAIL_SIGNUP_TOKEN` is unused and is not required for signup.
+- Production sets `WEBMAIL_COOKIE_SECURE=true`; development HTTP uses `false`.
+- Signup registers receiving IDs in `mailbox-account-store/virtual-mailbox-accounts`.
 
-## 저장소 원칙
+## Repository Principles
 
-실행 모듈, Compose, 문서만 추적한다. 이미지 빌드나 릴리즈 패키지는 Dockerfile과 Compose에서 재생성하며 저장소 내부에 생성물을 보관하지 않는다. `sprint/` workflow 계약은 로컬 guard 입력으로만 사용하고 Git에는 추적하지 않는다.
+Track runtime modules, Compose definitions, maintained tooling and documentation. Recreate image builds and distributable artifacts from source; do not store generated packages in the repository. `sprint/` contracts are local guard inputs and must not be tracked.
 
-운영 통합은 `compose.platform.yaml`의 `platform` 프로젝트가 담당한다. 다섯 실제 volume을 external로 사용하며 API 진단은 loopback20105, 일반 API는 HTTPS20006의 `/api/` 경로를 사용한다. 전환·검증·보안 패키지 판정은 [전환 기록](../guides/ubuntu-platform-transition.md)에 정리한다.
+The `platform` project in `compose.platform.yaml` owns the integrated production model. It references five existing external volumes. Diagnostic API access is loopback `20105`; normal API access uses `/api/` over HTTPS `20006`. The [transition record](../guides/ubuntu-platform-transition.md) documents migration, validation and distribution security-package assessment. Shared-edge installations have separate public URL mappings recorded in the later operational records.
 
-Maildir/drop MIME 첨부는 backpressure를 적용해 stream으로 저장하고 기존 CID 변환과 ledger를 보존한다. 메타데이터 I/O는 요청당32개, Maildir source는4개로 제한한다. Webmail V8 old/semi-space512/16MiB와 proxy2 worker/upstream keepalive8은 [성능 운영 기록](../guides/performance-2026-11-11.md)의 측정 workload에 맞춘 기본값이며 환경변수로 조정한다.
+Maildir/drop MIME attachments stream with backpressure while preserving CID conversion and the import ledger. Metadata I/O is limited to 32 concurrent operations per request and Maildir sources to four. Webmail V8 old/semi spaces of 512/16 MiB, two proxy workers and upstream keepalive eight are defaults measured for the workload in the [performance record](../guides/performance-2026-11-11.md); use configuration overrides when tuning a different workload.

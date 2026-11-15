@@ -1,10 +1,10 @@
 # MailBox Architecture Contract
 
-문서 최신화 기준일: 2026-11-15
+Last updated: 2026-11-15
 
 ## Repository Ownership
 
-사용자 표시는 `MailBox`, 기계 식별자는 `mailbox`, 로컬 checkout 디렉터리는 `mail-box`를 사용한다. `MailBox` TypeScript 타입과 `mailbox-store`처럼 메일함 자체를 뜻하는 기존 도메인 용어는 의미를 유지한다.
+Use `MailBox` for display, `mailbox` for machine identifiers and `mail-box` for the local checkout directory. Preserve existing domain terms that refer to a mailbox itself, such as the `MailBox` TypeScript type and `mailbox-store` volume.
 
 ```text
 compose.platform.yaml + docker-compose*.yml
@@ -12,18 +12,18 @@ compose.platform.yaml + docker-compose*.yml
   -> imap-mailbox
   -> webmail-ui
 
-docs/ai-agent   -> 작업 규칙과 불변 계약
-docs/developer  -> 사람 개발자용 설명과 운영 지식
+docs/ai-agent   -> work rules and invariant contracts
+docs/developer  -> human developer guidance and operational knowledge
 ```
 
-| 경로 | 소유 책임 | 두지 않는 책임 |
+| Path | Owns | Does Not Own |
 | --- | --- | --- |
-| `smtp-receiver` | Postfix 설정, 수신 주소, Maildir 배달 | Webmail 사용자·UI, IMAP 인증 |
-| `imap-mailbox` | Dovecot 설정, Maildir IMAP 제공 | SMTP routing, Webmail 저장 형식 |
-| `webmail-ui` | 로그인, 사용자별 메일 조회, 발송, Web UI 저장, HTTPS 프록시 설정 | Postfix·Dovecot 시스템 설정 |
-| 루트 Compose | 컨테이너 연결, port, volume, 환경변수 | 모듈 내부 business logic |
-| `docs/ai-agent` | 변경 절차, 검증, 금지 조건 | 사람 중심 온보딩 서술 |
-| `docs/developer` | 구조, 실행, 운영, 사용자 설명 | agent 전용 workflow 계약 |
+| `smtp-receiver` | Postfix configuration, recipient addresses, Maildir delivery | Webmail users/UI, IMAP authentication |
+| `imap-mailbox` | Dovecot configuration, IMAP access to Maildir | SMTP routing, Webmail storage format |
+| `webmail-ui` | Login, per-user mail access, sending, Web UI storage, HTTPS proxy configuration | Postfix/Dovecot system configuration |
+| Root Compose | Container connections, ports, volumes, environment variables | Module business logic |
+| `docs/ai-agent` | Change procedure, validation, prohibited actions | Human-oriented onboarding |
+| `docs/developer` | Architecture, setup, operations, user guidance | Agent-only workflow contracts |
 
 ## Allowed Dependency Direction
 
@@ -38,33 +38,33 @@ webmail-ui -> mailbox-account-store (account provisioning)
 smtp-receiver + imap-mailbox -> mailbox-account-store (runtime account read)
 ```
 
-SMTP나 IMAP 모듈이 Webmail 내부 파일을 import하거나, Webmail이 Postfix/Dovecot 설정 파일을 수정하는 방향은 금지한다.
+SMTP and IMAP must not import Webmail internals; Webmail must not modify Postfix or Dovecot configuration files.
 
 ## Security Invariants
 
-- 신규 비밀번호는 8~128자로 받으며 Dovecot 호환 salted Argon2id hash로 저장해 긴 비밀번호 전체를 검증한다. 기존 BLF-CRYPT 계정은 hash를 바꾸지 않고 계속 검증한다. 평문 비밀번호는 저장·기록하지 않는다.
-- SMTP `25`는 TLS 1.2 이상의 STARTTLS를 제공하고, IMAP `143`은 STARTTLS 후 로그인을 요구한다.
-- `MAIL_TLS_DIR`의 서버 인증서·키만 각 서비스에 read-only로 mount한다. CA 개인키는 해당 디렉터리 밖에 보관하며 인증서·키·`.env`는 추적하지 않는다.
-- 운영 HTTPS 프록시만 Webmail을 외부에 노출하며 로그인 cookie는 `Secure`를 사용한다. 개발 HTTP는 loopback 전용이다.
-- 공개 SMTP는 사설망·loopback을 포함한 네트워크 위치로 외부 중계를 허용하지 않는다. `mynetworks`는 loopback으로 고정한다.
-- 앱은 내부 `587`(전환 기간 동일 정책의 `2587` 유지)에 전용 SASL 계정과 필수 STARTTLS로 제출하며 CA·호스트명 검증을 생략하지 않는다. 실패 시 sendmail/평문 fallback은 금지한다.
-- MTA 외부 배달은 `smtp_tls_security_level=verify`로 TLS와 MX 호스트 인증서 검증을 요구한다. 지원하지 않는 목적지는 큐에 보류한다.
-- Dovecot SASL 소켓은 `smtp-auth-store`에서 root와 SMTP 전용 GID 1500만 접근한다. 계정 맵 감시기는 UID 5010, capability 0으로 실행한다.
-- Postfix master/virtual의 필요한 root 권한과 일반 작업자의 권한을 구분한다. 잔여 root 권한을 위험 수용 승인으로 간주하지 않는다.
-- `mailbox_user`는 HMAC 검증을 통과한 cookie만 신뢰한다.
-- 가입은 아이디와 8~128자 비밀번호로 공개 제공하며 Dovecot 사용자와 허용 domain의 Postfix 수신 주소를 함께 생성한다. 기존 계정 중복과 이전 계정 소유권 검사는 유지한다. 기존 recipient local-part는 domain과 무관하게 예약하며, 기존 비밀번호로 소유권을 증명한 이전 계정만 배달 경로를 이전할 수 있다. SMTP 서비스 ID는 실제 loopback peer와 설정된 서비스 비밀번호를 모두 증명한 내부 bootstrap만 생성할 수 있고 전달 헤더는 권한 근거가 아니다.
-- inbox, sent, bounced, detail, attachment, send는 현재 사용자 소유권을 검사한다.
-- `mailbox-store`는 Webmail에 read-only로 mount한다.
-- `mailbox-account-store`는 계정 원본이며 Webmail만 제한된 두 계정 파일을 갱신한다.
+- Accept new passwords of 8–128 characters and store Dovecot-compatible salted Argon2id hashes that verify the entire password. Continue verifying existing BLF-CRYPT accounts without changing their hashes. Never store or log plaintext passwords.
+- SMTP `25` offers STARTTLS with TLS 1.2 or later; IMAP `143` requires STARTTLS before login.
+- Mount only the server certificate/key from `MAIL_TLS_DIR` read-only into the relevant services. Keep the CA private key outside that directory. Never track certificates, keys or `.env`.
+- Expose production Webmail only through an HTTPS proxy and use `Secure` login cookies. Development HTTP is loopback-only.
+- Public SMTP must not authorize external relaying based on network location, including private networks or loopback. Fix `mynetworks` to loopback.
+- Applications submit to internal `587` (with the same policy on compatibility `2587`) using a dedicated SASL account and mandatory STARTTLS. Never skip CA/hostname verification or fall back to sendmail/plaintext on failure.
+- Outbound MTA delivery uses `smtp_tls_security_level=verify` and requires TLS and MX-host certificate verification. Defer unsupported destinations in the queue.
+- The Dovecot SASL socket in `smtp-auth-store` is accessible only to root and dedicated SMTP GID 1500. The account-map watcher runs as UID 5010 with no capabilities.
+- Distinguish the required root privileges of Postfix master/virtual from ordinary workers. Do not treat remaining root privileges as approved risk acceptance.
+- Trust `mailbox_user` only after HMAC cookie verification.
+- Signup is public with a user ID and an 8–128-character password. It creates the Dovecot user and Postfix recipients for allowed domains together. Preserve duplicate-account and legacy-ownership checks. Reserve existing recipient local parts across domains; migrate a legacy ID's delivery path only after proof with its original password. Create the SMTP service ID only through internal bootstrap proving both a real loopback peer and the configured service password. Forwarded headers do not grant this authority.
+- Enforce current-user ownership for inbox, sent, bounced, details, attachments and sending.
+- Mount `mailbox-store` read-only in Webmail.
+- `mailbox-account-store` is authoritative; only Webmail updates its two narrowly scoped account files.
 
 ## Data Invariants
 
-- SMTP와 IMAP은 같은 `mailbox-store`의 Maildir을 공유한다.
-- Postfix queue는 `smtp-queue-store`, Webmail 변환 데이터와 사용자는 `webmail-data-store`에 둔다.
-- Dovecot 사용자와 Postfix 수신 주소 map은 `mailbox-account-store`에 보존한다.
-- `docker compose down`은 volume을 보존하고 `down -v`만 volume을 제거한다.
-- 생성된 release, packaging script, tracked sprint contract를 저장소에 추가하지 않는다.
+- SMTP and IMAP share Maildirs in `mailbox-store`.
+- Postfix queues live in `smtp-queue-store`; Webmail imported data and legacy users live in `webmail-data-store`.
+- Preserve Dovecot users and Postfix recipient maps in `mailbox-account-store`.
+- `docker compose down` preserves volumes; `down -v` removes volumes managed by the selected model. The platform model declares the five existing volumes external; never remove them explicitly either.
+- Do not add generated release artifacts, one-time packaging scripts or tracked sprint contracts to the repository. Maintained release tooling and workflows remain source code.
 
 ## Platform Runtime
 
-운영 Compose 프로젝트는 `platform`, 서비스는 `mailbox-*`다. 네 런타임은 Ubuntu 26.04이며 Webmail과 SMTP는 같은 Ubuntu Node24 base를 `NODE_IMAGE` ARG로 받는다. 실제 다섯 named volume은 external로 보존하고 기존 파일 소유권을 재귀 변경하지 않는다. 표준 내부 포트는 SMTP25/submission587/IMAP143/proxy80·443이다. 기존2525·2587 및 `mailbox_default` 연결과 이전 웹 URL은 소비자 전환을 확인한 뒤 별도 작업으로 정리한다.
+Production uses the `platform` Compose project and `mailbox-*` services. All four runtimes use Ubuntu 26.04. Webmail and SMTP accept the same Ubuntu Node.js 24 base through the `NODE_IMAGE` argument. Preserve all five existing external named volumes; do not recursively change their ownership. Standard internal ports are SMTP 25, submission 587, IMAP 143 and proxy 80/443. Remove compatibility ports 2525/2587, `mailbox_default` connectivity and old Web URLs only in a separate task after consumers have migrated.

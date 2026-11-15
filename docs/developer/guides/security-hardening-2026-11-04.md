@@ -1,111 +1,111 @@
-# MailBox 메일 서비스 보안 검증 — 2026-11-04
+# MailBox Mail-Service Security Validation — 2026-11-04
 
-## 이미지 재검사
+Historical record. Image versions, scan results and process IDs below describe the November 4 validation, before the Ubuntu transition. Translation does not renew the scan or describe today's runtime.
 
-Trivy 0.76.1로 정확한 이미지 archive를 검사했다. 전체 심각도를 수집했으며 CVE 제외 목록, `ignore-unfixed`, 심각도 필터를 사용하지 않았다. 후속 검사는 같은 DB에서 `--skip-db-update`를 사용했다. 결과는 해당 이미지와 DB 시점에 한정된다.
+## Image Rescan
 
-기존 대상 `sha256:594e743418aadf1ed23478ba448bcb6cad5809c99858ecca9c06e43d7de12c99`에서 LOW 102 / MEDIUM 114 / HIGH 33 / CRITICAL 1 / UNKNOWN 1, 총 251행을 재현했다. HIGH·CRITICAL 34행은 CVE ID로 중복 제거하면 10종이며 `(설치 source package, CVE)`로 합쳐도 10건이다.
+Trivy 0.76.1 scanned exact image archives at all severities. No CVE exclusion list, `ignore-unfixed` or severity filter was used. Follow-up scans used `--skip-db-update` with the same database. Results apply only to those images and that database snapshot.
 
-| 최종 이미지 | LOW | MEDIUM | HIGH | CRITICAL | UNKNOWN |
+The original target, `sha256:594e743418aadf1ed23478ba448bcb6cad5809c99858ecca9c06e43d7de12c99`, reproduced LOW 102 / MEDIUM 114 / HIGH 33 / CRITICAL 1 / UNKNOWN 1: 251 raw rows. Deduplicating the 34 HIGH/CRITICAL rows by CVE ID yields ten distinct CVEs; grouping by `(installed source package, CVE)` also yields ten findings.
+
+| Final Image | LOW | MEDIUM | HIGH | CRITICAL | UNKNOWN |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | SMTP | 0 | 0 | 0 | 0 | 0 |
 | Webmail | 0 | 0 | 0 | 0 | 0 |
 | IMAP | 0 | 0 | 0 | 0 | 0 |
 | HTTPS proxy | 0 | 0 | 0 | 0 | 0 |
 
-SMTP는 Alpine 3.24.3 / Postfix 3.11.7로 교체했다. 앱은 Next.js 16.4.5, Nodemailer 10.3.1, MailParser 3.14.1과 수정된 의존성을 사용한다. 개발 의존성과 런타임에 불필요한 npm/Yarn을 제외했다. SMTP의 Node.js는 내장 모듈만 사용하는 비권한 맵 감시기에 필요하다.
+SMTP moved to Alpine 3.24.3 / Postfix 3.11.7. The application used Next.js 16.4.5, Nodemailer 10.3.1, MailParser 3.14.1 and patched dependencies. Development dependencies and runtime-unnecessary npm/Yarn were excluded. SMTP still needed Node.js for its unprivileged map watcher, which uses built-in modules only.
 
-IMAP은 후속 수정으로 Alpine 3.24.3 / Dovecot 2.4.5로 교체했다. 이전 IMAP 이미지의 HIGH 32 / CRITICAL 1을 다시 재현한 뒤, 새 이미지의 전체 심각도 재검사에서 0건을 확인했다. 기존에 남겨 두었던 IMAP 고위험 검출을 이번 후속 작업에서 해소했다. SMTP·Webmail도 같은 최신 DB로 함께 재검사했다.
+The IMAP follow-up moved to Alpine 3.24.3 / Dovecot 2.4.5. After reproducing the previous image's HIGH 32 / CRITICAL 1, an all-severity scan of the new image found zero. This follow-up resolved the previously retained high-severity IMAP findings. SMTP and Webmail were rescanned with the same current database.
 
-## 기존 SMTP의 고위험 10종
+## Ten High-Severity CVEs in the Original SMTP Image
 
-| CVE | 원시 행 | 설치 구성과 조치 |
+| CVE | Raw Rows | Installed Configuration and Action |
 | --- | ---: | --- |
-| CVE-2026-43964 | 1 | 영향 버전 Postfix 3.7.11을 수정된 3.11.7로 교체. |
-| CVE-2023-45853 | 1 | zlib source 단위 검출. 설치된 MiniZip 바이너리·취약 심볼 없음. |
-| CVE-2025-69720 | 3 | ncurses source 중복. infocmp CLI 문제로 SMTP 처리와 구분. 새 이미지에서 검출 없음. |
-| CVE-2026-16742 | 2 | libsystemd/libudev source 중복. 취약 기능 systemd-homed 미설치. 새 이미지에 systemd 없음. |
-| CVE-2026-41992 | 1 | GNU gzip LZH 처리 문제. SMTP에서 호출하지 않으며 새 이미지에서 검출 없음. |
-| CVE-2026-53613 | 8 | util-linux source 중복. fstab 기반 mount 문제. 새 이미지에서 검출 없음. |
-| CVE-2026-53615 | 8 | util-linux source 중복. DOS partition probing 문제. 새 이미지에서 검출 없음. |
-| CVE-2026-78410 | 8 | util-linux source 중복. privileged bind mount 문제. 새 이미지에서 검출 없음. |
-| CVE-2026-54369 | 1 | libacl pathname API 문제. 새 이미지에 libacl 의존성 없음. |
-| CVE-2026-9538 | 1 | perl-base source 검출. 취약 Archive::Tar 모듈 미설치. 새 이미지에 Perl 없음. |
+| CVE-2026-43964 | 1 | Replaced affected Postfix 3.7.11 with fixed 3.11.7. |
+| CVE-2023-45853 | 1 | zlib source-package finding; no installed MiniZip binary or vulnerable symbol. |
+| CVE-2025-69720 | 3 | Duplicate ncurses source findings. The infocmp CLI issue is distinct from SMTP handling. Absent from the new image's scan. |
+| CVE-2026-16742 | 2 | Duplicate libsystemd/libudev source findings. The vulnerable systemd-homed feature was not installed; the new image has no systemd. |
+| CVE-2026-41992 | 1 | GNU gzip LZH handling, not invoked by SMTP; absent from the new image's scan. |
+| CVE-2026-53613 | 8 | Duplicate util-linux source findings for fstab-based mounting; absent from the new image's scan. |
+| CVE-2026-53615 | 8 | Duplicate util-linux source findings for DOS partition probing; absent from the new image's scan. |
+| CVE-2026-78410 | 8 | Duplicate util-linux source findings for privileged bind mounting; absent from the new image's scan. |
+| CVE-2026-54369 | 1 | libacl pathname API; no libacl dependency in the new image. |
+| CVE-2026-9538 | 1 | perl-base source finding; vulnerable Archive::Tar module not installed, and no Perl in the new image. |
 
-Postfix 문제는 텍스트 없는 enhanced status code의 경계 밖 읽기다. upstream은 SMTP/LMTP 서버 응답으로 재현되지 않고 access/policy 등의 경로에 영향을 준다고 설명한다. 기존 설정에 policy, milter, DNSBL 사용은 없어 인터넷 SMTP 명령만으로 악용 가능하다고 단정하지 않았다. 영향 바이너리는 수정 버전으로 교체했다. [Debian 상태](https://security-tracker.debian.org/tracker/CVE-2026-43964), [Postfix 수정 공지](https://www.postfix.org/announcements/postfix-3.11.2.html).
+The Postfix issue is an out-of-bounds read of an enhanced status code without text. Upstream described access/policy paths, rather than reproduction through SMTP/LMTP server responses. The original configuration used no policy service, milter or DNSBL, so exploitability through Internet SMTP commands alone was not asserted. The affected binary was nevertheless replaced. See the [Debian status](https://security-tracker.debian.org/tracker/CVE-2026-43964) and [Postfix fix announcement](https://www.postfix.org/announcements/postfix-3.11.2.html).
 
-CVE-2023-45853은 zlib 핵심 압축 API가 아닌 MiniZip의 `zipOpenNewFileInZip4_64`에 해당한다. 정확한 기존 이미지에는 `zlib1g 1:1.2.13.dfsg-1`만 있고 `minizip`, `libminizip1`, `zlib1g-dev`가 없다. `/usr`의 MiniZip 파일과 설치 libz의 해당 심볼도 없다. Debian은 bookworm zlib의 contrib/minizip이 빌드되지 않아 해당 바이너리가 영향받지 않는다고 명시한다. 원시 scanner 결과를 숨기지 않고 영향 판정만 분리했다. [Debian 공식 근거](https://security-tracker.debian.org/tracker/CVE-2023-45853).
+CVE-2023-45853 affects MiniZip's `zipOpenNewFileInZip4_64`, not zlib's core compression API. The exact old image contained only `zlib1g 1:1.2.13.dfsg-1`, without `minizip`, `libminizip1` or `zlib1g-dev`. No MiniZip files under `/usr` or corresponding symbols in installed libz were present. Debian states that bookworm's zlib does not build contrib/minizip, leaving those binaries unaffected. The impact assessment was recorded separately without hiding the scanner's raw result. See the [official Debian assessment](https://security-tracker.debian.org/tracker/CVE-2023-45853).
 
-나머지 source 판정은 Debian tracker의 [ncurses](https://security-tracker.debian.org/tracker/CVE-2025-69720), [systemd](https://security-tracker.debian.org/tracker/CVE-2026-16742), [gzip](https://security-tracker.debian.org/tracker/CVE-2026-41992), [util-linux 53613](https://security-tracker.debian.org/tracker/CVE-2026-53613), [53615](https://security-tracker.debian.org/tracker/CVE-2026-53615), [78410](https://security-tracker.debian.org/tracker/CVE-2026-78410), [acl](https://security-tracker.debian.org/tracker/CVE-2026-54369), [Perl](https://security-tracker.debian.org/tracker/CVE-2026-9538)을 사용했다.
+Other source-package assessments used Debian's trackers for [ncurses](https://security-tracker.debian.org/tracker/CVE-2025-69720), [systemd](https://security-tracker.debian.org/tracker/CVE-2026-16742), [gzip](https://security-tracker.debian.org/tracker/CVE-2026-41992), [util-linux 53613](https://security-tracker.debian.org/tracker/CVE-2026-53613), [53615](https://security-tracker.debian.org/tracker/CVE-2026-53615), [78410](https://security-tracker.debian.org/tracker/CVE-2026-78410), [acl](https://security-tracker.debian.org/tracker/CVE-2026-54369) and [Perl](https://security-tracker.debian.org/tracker/CVE-2026-9538).
 
-## 권한과 잔여 root
+## Privileges and Remaining Root Roles
 
-- 초기화 동안 CHOWN, DAC_OVERRIDE, FOWNER, SETPCAP, SETUID, SETGID, KILL만 허용한다. Docker 기본 capability는 모두 drop한다.
-- master PID 1: UID 0, CapEff/CapBnd `0x00e2` = DAC_OVERRIDE, KILL, SETGID, SETUID. `NoNewPrivs=1`. 초기화용 CHOWN/FOWNER/SETPCAP은 남지 않는다.
-- smtpd/qmgr: real/effective/saved UID 모두 100, GID 1500, CapEff 0.
-- virtual: 대기 시 effective UID 100이며 Maildir UID 5000으로 전환하기 위한 saved root가 남는다. fixture Maildir 배달 성공을 확인했다.
-- 맵 감시기: UID 5010/GID 5000, CapEff/CapBnd 0. root reload 감시기를 제거하고 원자 LMDB 교체를 사용한다.
-- 공개 host 25는 container 2525로 연결한다. NET_BIND_SERVICE/SYS_CHROOT, 미사용 local/pipe/spawn 서비스, SUID/SGID 비트를 제외했다. postqueue/postdrop 권한 경고는 비권한 로컬 제출 helper를 비활성화한 결과다.
+- Initialization permits only CHOWN, DAC_OVERRIDE, FOWNER, SETPCAP, SETUID, SETGID and KILL. Drop all default Docker capabilities.
+- Master PID 1: UID 0, CapEff/CapBnd `0x00e2` = DAC_OVERRIDE, KILL, SETGID, SETUID; `NoNewPrivs=1`. Initialization-only CHOWN/FOWNER/SETPCAP do not remain.
+- smtpd/qmgr: real/effective/saved UID 100, GID 1500, CapEff 0.
+- virtual: idle effective UID 100, with saved root retained to switch to Maildir UID 5000. Fixture Maildir delivery succeeded.
+- Map watcher: UID 5010/GID 5000, CapEff/CapBnd 0. Atomic LMDB replacement removed the root reload watcher.
+- Public host 25 mapped to container 2525 in this historical configuration. NET_BIND_SERVICE/SYS_CHROOT, unused local/pipe/spawn services and SUID/SGID bits were removed. postqueue/postdrop permission warnings resulted from disabling unprivileged local submission helpers.
 
-DAC_OVERRIDE를 제거한 시험에서는 queue/data 디렉터리 접근이 실패해 필요한 권한으로 한정했다. root master와 virtual의 saved root는 여전히 남아 있으며 완전한 비root 실행은 아니다. **잔여 root 권한에 대한 위험 수용 승인을 받았다고 간주하거나 기록하지 않았다.** Postfix의 지원되는 프로세스 권한 분리와 Maildir 배달을 보존하며 불필요한 권한을 줄였다. [Postfix 비권한 실행 제한](https://www.postfix.org/UNPRIVILEGED_README.html)은 파일/Maildir 배달에서 제시된 비권한 실행 방식을 production에 사용하지 말라고 설명한다.
+Removing DAC_OVERRIDE caused queue/data access failures, so its retention was limited to a demonstrated requirement. Root master and virtual's saved root remained: execution was not fully non-root. **No risk-acceptance approval for these remaining root privileges was assumed or recorded.** Unnecessary privileges were reduced while preserving supported Postfix separation and Maildir delivery. The [Postfix unprivileged-execution guidance](https://www.postfix.org/UNPRIVILEGED_README.html) warns against using its proposed unprivileged mode in production for file/Maildir delivery.
 
-## 제출·중계·TLS 검증
+## Submission, Relay and TLS Validation
 
-| 경로/조건 | 실제 확인 결과 |
+| Path or Condition | Observed Result |
 | --- | --- |
-| 기존 운영망의 별도 비인증 Docker peer → 외부 RCPT | 250. 사설망 중계 권한이 넓었음. DATA 전송 없음. |
-| 새 공개 수신 → 비로컬 RCPT | 같은 사설망 peer도 거부 554. AUTH 미제공. |
-| 공개 수신 → 등록된 로컬 recipient | 250, STARTTLS 제공. |
-| 내부 제출 2587, TLS 전 | AUTH 미광고, MAIL 거부 530, 호스트 port 미공개. |
-| TLS 후 비인증·잘못된 비밀번호 | 외부 RCPT 거부 554 / AUTH 거부 535. |
-| TLS 후 유효한 일반 IMAP 계정 | 인증 성공 후에도 서비스 중계 거부 554. |
-| TLS 후 전용 서비스 계정 | 제출 허용, fixture Maildir 배달 성공. |
-| 앱: STARTTLS 없음/핸드셰이크 실패/신뢰 오류/호스트 불일치 | 모두 실패, AUTH·MAIL·DATA 전송 없음. 정상 검증 TLS 성공. |
-| Postfix → 시험 MTA: TLS 없음/호스트 불일치/핸드셰이크 실패 | 모두 deferred, 평문 DATA 없음. |
-| Postfix → 유효한 인증서의 시험 MTA | Verified TLS 및 DATA 배달 성공. |
+| Separate unauthenticated Docker peer on the old production network -> external RCPT | 250: private-network relay trust was too broad. No DATA sent. |
+| New public reception -> nonlocal RCPT | 554 rejection, including a peer on the same private network; AUTH not offered. |
+| Public reception -> registered local recipient | 250; STARTTLS offered. |
+| Internal submission 2587 before TLS | AUTH not advertised, MAIL rejected with 530; no host-published port. |
+| After TLS, unauthenticated or wrong password | External RCPT rejected with 554 / AUTH rejected with 535. |
+| After TLS, valid ordinary IMAP account | Authentication succeeded but service relaying was rejected with 554. |
+| After TLS, dedicated service account | Submission allowed; fixture Maildir delivery succeeded. |
+| Application: missing STARTTLS, handshake failure, untrusted CA or hostname mismatch | All failed without AUTH/MAIL/DATA; valid verified TLS succeeded. |
+| Postfix -> test MTA: missing TLS, hostname mismatch or handshake failure | All deferred; no plaintext DATA. |
+| Postfix -> test MTA with valid certificate | Verified TLS and successful DATA delivery. |
 
-공개 25의 `smtpd_tls_security_level=may`는 인터넷 수신 호환성을 위해 유지한다. 앱 listener는 `encrypt`, 앱 transport는 `requireTLS=true`, `rejectUnauthorized=true`, TLS 1.2 이상과 명시적 servername을 사용한다. Dovecot Unix socket은 GID 1500·0660으로 제한한다. 전용 service identity만 제출을 허용하며 사설망 trust나 sendmail fallback으로 우회할 수 없다.
+Public port 25 retained `smtpd_tls_security_level=may` for Internet reception compatibility. The application listener used `encrypt`; its transport used `requireTLS=true`, `rejectUnauthorized=true`, TLS 1.2 or later and an explicit servername. The Dovecot Unix socket was restricted to GID 1500/mode 0660. Only the dedicated service identity could submit, with no private-network trust or sendmail fallback.
 
-외부 배달은 `smtp_tls_security_level=verify`, `smtp_tls_verify_cert_match=hostname`이다. 상대가 TLS 또는 MX 호스트 인증서 검증을 통과하지 못하면 큐에 보류한다. 전용 인증·복구 메일 기능은 현재 이 저장소에 없으며 향후 동일 제출 모듈을 사용해야 한다. [Postfix TLS 정책](https://www.postfix.org/TLS_README.html), [Dovecot/Postfix SASL](https://doc.dovecot.org/2.3/configuration_manual/howto/postfix_and_dovecot_sasl/).
+Outbound delivery used `smtp_tls_security_level=verify` and `smtp_tls_verify_cert_match=hostname`. A destination failing TLS or MX-host certificate verification was deferred. This repository had no dedicated authentication/recovery-mail feature; future implementations must use the same submission module. See [Postfix TLS policy](https://www.postfix.org/TLS_README.html) and [Dovecot/Postfix SASL](https://doc.dovecot.org/2.3/configuration_manual/howto/postfix_and_dovecot_sasl/).
 
-기존 인터넷 오픈 릴레이 여부는 별도로 확정하지 않았다. 기존에 확인한 것은 사설망 peer의 중계 허용이다. 시험 메일 DATA는 격리된 network와 자체 Maildir/sink에서만 사용했고 실제 외부 수신자에게 발송하지 않았다.
+The old server's Internet open-relay status was not independently established. The demonstrated issue was relay permission for a private-network peer. All test DATA stayed within isolated networks and local Maildir/sinks; no real external recipient received test mail.
 
-## 증거와 재검사
+## Evidence and Rescanning
 
-로컬 `.agents/security-hardening/reports/`에 원시 Trivy JSON, 이미지 ID 연결, 패키지 목록, 단위 테스트, SMTP 권한/TLS/프로세스 검증을 보존한다. 비밀번호·토큰·개인키는 보고서와 커밋에 포함하지 않는다.
+Local `.agents/security-hardening/reports/` preserves raw Trivy JSON, image-ID bindings, package lists, unit tests and SMTP authorization/TLS/process checks. Reports and commits exclude passwords, tokens and private keys.
 
 ```bash
 npm test --prefix webmail-ui
 docker compose --env-file .env.example -f docker-compose.prod.yml config --quiet
-trivy image --scanners vuln --format json --output <workspace>/reports/smtp.json <정확한-이미지-ID>
+trivy image --scanners vuln --format json --output <workspace>/reports/smtp.json <exact-image-ID>
 ```
 
-이미지를 다시 빌드하거나 태그가 바뀌면 해당 이미지 ID로 재검사한다. 런타임 manifest ID와 scanner config ID는 archive의 `index.json`/`manifest.json`으로 연결해 검증했다.
+Rescan the actual image ID after rebuilding or changing tags. Archive `index.json`/`manifest.json` bound runtime manifest IDs to scanner config IDs.
 
-## IMAP 후속 수정과 호환성 검증
+## IMAP Follow-Up and Compatibility
 
-이전 IMAP의 고위험 원시 33행은 CVE 9종이다. CRITICAL MiniZip은 정확한 이전 IMAP 이미지에서도 관련 바이너리·심볼이 없어 영향 없음으로 판정했다. 나머지 ncurses, systemd, GNU gzip, util-linux, libacl, Perl source 패키지는 새 이미지의 의존성에서 제거됐으며 같은 CVE가 새 이미지에서 검출되지 않았다. 단순히 CVE를 제외하거나 미사용으로 표시해 수치를 낮추지 않았다.
+The old IMAP image's 33 HIGH/CRITICAL raw rows represented nine CVEs. Critical MiniZip was assessed as unaffected in that exact image because the relevant binaries/symbols were absent. The remaining ncurses, systemd, GNU gzip, util-linux, libacl and Perl source dependencies were removed from the new image; the same CVEs no longer appeared. Counts were not reduced merely through CVE exclusions or unused-feature labels.
 
-Dovecot 2.4 설정 문법으로 TLS 인증서·키, passwd-file, 사용자명 변수와 Maildir 경로를 전환했다. `dovecot_storage_version=2.3.0`으로 이전 2.3 인스턴스가 index를 읽을 수 있는 호환성을 유지한다. [공식 전환 안내](https://doc.dovecot.org/2.4.1/installation/upgrade/2.3-to-2.4.html), [저장 형식 버전](https://doc.dovecot.org/2.4.1/core/summaries/settings.html#dovecot_storage_version).
+TLS certificates/keys, passwd-file, username variables and Maildir paths moved to Dovecot 2.4 configuration syntax. `dovecot_storage_version=2.3.0` preserved index compatibility for a rollback to 2.3. See the [official migration guide](https://doc.dovecot.org/2.4.1/installation/upgrade/2.3-to-2.4.html) and [storage-version setting](https://doc.dovecot.org/2.4.1/core/summaries/settings.html#dovecot_storage_version).
 
-운영 volume의 읽기 전용 복사본과 격리 fixture에서 다음을 검증했다.
+A read-only copy of production volumes and isolated fixtures verified:
 
-- 2.3 → 2.4 → 2.3 롤백 → 2.4 재전환 모두 기존 UIDVALIDITY, UID, 메일 수, 읽음 상태 보존.
-- TLS 전 IMAP 로그인 거절, 인증서·호스트 검증을 통과한 STARTTLS와 기존 BLF-CRYPT 계정 로그인 성공.
-- 복사된 기존 서비스 계정으로 Postfix SASL 인증 성공. 일반 계정·비인증 주체의 중계 거부와 전용 계정 제출, Maildir 배달 재검증 통과.
-- `doveconf -n`으로 새 설정 검증. 계정 hash와 원본 Maildir 메일 내용의 SHA-256을 운영 교체 전후 비교.
+- Existing UIDVALIDITY, UIDs, message count and read flags across 2.3 -> 2.4 -> 2.3 rollback -> 2.4.
+- Rejection of IMAP login before TLS; successful certificate/hostname-verified STARTTLS and existing BLF-CRYPT login.
+- Postfix SASL using a copied existing service account; rejection of ordinary/unauthenticated relaying, dedicated-account submission and Maildir delivery.
+- New configuration with `doveconf -n`, plus account hashes and original Maildir message SHA-256 comparisons before/after replacement.
 
-후속 원시 검사와 호환성 증거는 로컬 `.agents/imap-hardening/reports/`에 보존한다.
+Local `.agents/imap-hardening/reports/` preserves follow-up raw scans and compatibility evidence. Full ICU data supports Korean search and legacy character sets; separate fixtures verified UTF-8 subjects and EUC-KR body search.
 
-한글 검색과 과거 문자셋 지원을 위해 ICU 전체 데이터를 포함하고, UTF-8 제목·EUC-KR 본문 검색을 별도 fixture로 검증했다.
+## HTTPS Proxy Follow-Up
 
-## HTTPS 프록시 후속 검사
+The old Caddy 2.11.7 image also had raw HIGH 9 / CRITICAL 1, representing seven distinct CVEs across Brotli, curl, Go's standard library, x/net and go-jose v3/v4. The available current Caddy image retained those dependencies, and an official upstream 2.11.8 container was not yet available at the time. Its source still depended on go-jose v3 without a fixed version, so changing a version number alone was insufficient. See the [Caddy release](https://github.com/caddyserver/caddy/releases/tag/v2.11.8) and [go-jose advisory](https://github.com/go-jose/go-jose/security/advisories/GHSA-mgcc-cww5-fp2q).
 
-이전 Caddy 2.11.7 이미지에서도 원시 HIGH 9 / CRITICAL 1을 확인했다. CVE ID 중복 제거 시 7종이다. Brotli와 curl, Go 표준 라이브러리, x/net, go-jose v3/v4에서 검출됐다. 설치된 최신 Caddy 이미지에도 같은 의존성이 남았고 새 upstream 2.11.8의 공식 컨테이너는 아직 제공되지 않았다. v2.11.8 source에도 패치 버전이 없는 go-jose v3 의존성이 남아 있어 버전 번호만 바꾸지 않았다. [Caddy release](https://github.com/caddyserver/caddy/releases/tag/v2.11.8), [go-jose 공식 권고](https://github.com/go-jose/go-jose/security/advisories/GHSA-mgcc-cww5-fp2q).
+The required explicit-certificate HTTPS reverse proxy and HTTP 308 redirect moved to Nginx 1.30.6. The updated Alpine proxy's all-severity rescan found zero. Existing public ports, certificates, backend and read-only execution were preserved; generated runtime configuration and temporary files used tmpfs only.
 
-현재 사용하는 명시적 인증서 HTTPS reverse proxy와 HTTP 308 이동 기능을 Nginx 1.30.6으로 전환했다. Alpine 패키지를 갱신한 새 프록시의 재검사는 전체 심각도 0건이다. 기존 공개 포트·인증서·백엔드와 read-only 실행을 유지한다. 런타임 설정과 임시 파일은 tmpfs만 사용한다.
-
-격리 환경에서 HTTP URI/query를 보존한 308 이동, 검증된 HTTPS, 잘못된 호스트명/신뢰 체인 거절, 로그인과 받은편지함, Secure/HttpOnly/SameSite 쿠키를 확인했다. 클라이언트가 보낸 X-Forwarded-For를 신뢰하지 않고 실제 접속 IP로 덮어쓰는 것도 검사했다. 새 proxy 접근 로그는 비밀번호·쿠키·인증 헤더·메일 본문 없이 JSON으로 기록한다.
+Isolation checks covered URI/query-preserving 308 redirects, verified HTTPS, rejection of wrong hostnames/chains, login/inbox and Secure/HttpOnly/SameSite cookies. The proxy replaced client-supplied X-Forwarded-For with the real peer IP. New proxy access logs used JSON without passwords, cookies, authentication headers or message bodies.
 
 ## Image binding evidence
 
